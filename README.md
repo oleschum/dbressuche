@@ -26,7 +26,8 @@ Diese kleine Applikation bietet Abhilfe:
 
 > ⚠️ Firefox muss auf deinem PC installiert sein! Download unter https://www.mozilla.org/de/firefox/new/
 
-###Windows
+
+### Windows
 
 Die Software kommt in einem praktischen Installer für dich.
 Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im Startmenü oder auf dem Desktop zu haben. 
@@ -35,7 +36,8 @@ Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im 
 <img width="60" height="50" src="https://upload.wikimedia.org/wikipedia/de/thumb/c/c2/Microsoft_Windows_7_logo.svg/2000px-Microsoft_Windows_7_logo.svg.png">
 </a>
 
-###Ubuntu
+
+### Ubuntu
 
 Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fertig für dich gebaut ist.
 
@@ -46,7 +48,7 @@ Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fer
 Führe einfach `DeutscheBahnReservierungssuche` aus dem Ordner aus.
 
 
-###Mac
+### Mac
 
 Aktuell gibt es noch keine Binaries für Mac.
 Du kannst dieses Repository klonen, die nötigen Python Packages installieren und dann die Applikation selbst aus Python
