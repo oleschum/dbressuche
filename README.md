@@ -1,0 +1,54 @@
+# Deutsche Bahn Reservierungssuche
+
+![Screenshot der APp](./assets/DBReservierungssuche.png?raw=true "Screenshot")
+
+Hallo Reisender! <br>
+Du bist auf der Suche nach einer Verbindung von *A* nach *B*,
+möchtest dabei aber unbedingt eine bestimmte Sitzplatzkategorie reservieren (z.B. das **Kleinkindabteil**)?
+
+Leider bietet die Deutsche Bahn auf ihrer Website diese Suchfunktion nicht direkt an.<br>
+Zwar kannst du die Suche so einschränken, dass du nur Züge findest, in denen du dein Fahrrad mitnehmen kannst,
+aber wenn du nur Züge finden willst, in denen das Kleinkindabteil frei ist, so bist du auf dich gestellt.
+
+Diese kleine Applikation bietet Abhilfe:
+1. Trage deine Verbindungsdaten ein
+2. Wähle deine gewünschte Reservierungsoption
+3. Erhalte eine Übersicht über alle Verbindungen und deren Reservierungsmöglichkeiten :partying_face:
+
+> **Disclaimer**
+>
+> `Deutsche Bahn Reservierungssuche` ist **kein** Produkt der Deutschen Bahn AG oder einer ihrer Tochtergesellschaften.
+>
+> Es handelt sich um ein reines Hobbyprojekt ohne jegliche Garantien für die Richtigkeit der Angaben.
+
+
+## Downloads
+
+> ⚠️ Firefox muss auf deinem PC installiert sein! Downlaod unter https://www.mozilla.org/de/firefox/new/
+
+###Windows
+Die Software kommt in einem praktischen Installer für dich.
+Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im Startmenü oder auf dem Desktop zu haben. 
+
+<a href="https://github.com/oleschum/dbressuche/issues">
+<img width="60" height="50" src="https://upload.wikimedia.org/wikipedia/de/thumb/c/c2/Microsoft_Windows_7_logo.svg/2000px-Microsoft_Windows_7_logo.svg.png">
+</a>
+
+###Ubuntu
+Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fertig für dich gebaut ist.
+
+<a href="https://github.com/oleschum/dbressuche/issues">
+<img width="60" src=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/512px-UbuntuCoF.svg.png>
+</a>
+
+Führe einfach `DeutscheBahnReservierungssuche` aus dem Ordner aus.
+
+
+###Mac
+Aktuell gibt es noch keine Binaries für Mac.
+Du kannst dieses Repository klonen, die nötigen Python Packages installieren und dann die Applikation selbst aus Python
+heraus starten.
+
+
+**Pull Requests für eine getestete PyInstaller Variante für Mac sind gerne gesehen!**
+

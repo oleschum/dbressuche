@@ -1,0 +1,97 @@
+# Deploy workflow
+# Builds the application for windows and ubuntu and creates distributable. Then creates a new
+#   Github release with the tag name and uploads the distributables to the release.
+#   Runs only on "v*" tags like "v1.0.0".
+name: deploy
+
+on:
+  push:
+    tags:
+      - v*.*.*
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+      - name: tagname
+        uses: olegtarasov/get-tag@v2.1
+
+      - name: Write version file
+        run: echo ${{ env.GIT_TAG_NAME }} > version.txt
+
+      - name: Setup Python
+        uses: actions/setup-python@v2.2.2
+        with:
+          python-version: 3.10
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build Windows
+        run: pyinstaller --clean --noconfirm specs/windows_build_folder.spec
+
+      - name: Chocolatey install innosetup
+        uses: crazy-max/ghaction-chocolatey@v1.5.0
+        with:
+          # Arguments to pass to Chocolatey
+          args: install innosetup --install-arguments="'/DIR=../innosetup'" --force
+
+      - name: Innosetup windows-terminservice
+        # Run innosetup and set application version to git tag
+        run: ../innosetup/ISCC.exe specs/windows_inno_setup.iss /DApplicationVersion=${{ env.GIT_TAG_NAME }}
+
+      - name: Store windows installer as build artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: DBReservierungsSucheSetup-windows-installer
+          path: installers/DBReservierungsSucheSetup.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+      - name: tagname
+        uses: olegtarasov/get-tag@v2.1
+
+      - name: Write version file
+        run: echo ${{ env.GIT_TAG_NAME }} > version.txt
+
+      - name: Setup Python
+        uses: actions/setup-python@v2.2.2
+        with:
+          python-version: 3.10
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Build Linux
+        run: pyinstaller --clean --noconfirm specs/linux_build_folder.spec
+      - name: Zip
+        uses: papeloto/action-zip@v1
+        with:
+          files: dist/
+          dest: DBReservierungsSucheSetup.zip
+      - name: Store ubuntu build artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: DBReservierungsSuche-ubuntu
+          path: DBReservierungsSucheUbuntu.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux]
+    steps:
+      - name: Download build files
+        uses: actions/download-artifact@v2
+      - uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false
+          files: |
+            DBReservierungsSucheSetup-windows-installer/DBReservierungsSucheSetup.exe
+            DBReservierungsSuche-ubuntu/DBReservierungsSucheUbuntu.zip

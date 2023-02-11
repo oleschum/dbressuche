@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="39.614948mm"
+   height="34.322659mm"
+   viewBox="0 0 39.614948 34.322659"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04)"
+   sodipodi:docname="fail_icon.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="mm"
+     showgrid="false"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0"
+     inkscape:zoom="1.4948513"
+     inkscape:cx="126.0995"
+     inkscape:cy="62.882509"
+     inkscape:window-width="1920"
+     inkscape:window-height="1011"
+     inkscape:window-x="0"
+     inkscape:window-y="32"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1" />
+  <defs
+     id="defs2" />
+  <g
+     inkscape:label="Ebene 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-0.08599616,0.01125735)">
+    <path
+       sodipodi:type="star"
+       style="fill:#e74c3c;fill-opacity:0.899691;stroke-width:2.89134;stroke-linecap:round"
+       id="path846"
+       inkscape:flatsided="true"
+       sodipodi:sides="6"
+       sodipodi:cx="189.87668"
+       sodipodi:cy="132.89069"
+       sodipodi:r1="74.862923"
+       sodipodi:r2="64.833191"
+       sodipodi:arg1="1.0397109"
+       sodipodi:arg2="1.5633097"
+       inkscape:rounded="0"
+       inkscape:randomized="0"
+       d="m 227.79247,197.44183 -74.86082,0.56047 -37.9158,-64.55115 36.94504,-65.111606 74.86082,-0.560468 37.91579,64.551144 z"
+       transform="matrix(0.26457432,0.00218259,-0.00218259,0.26457432,-30.052976,-18.423814)" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.2267px;line-height:0;font-family:'TeX Gyre Pagella';-inkscape-font-specification:'TeX Gyre Pagella';letter-spacing:0px;word-spacing:0px;fill:#ffffff;fill-opacity:1;stroke:none;stroke-width:0.419027"
+       x="8.0690212"
+       y="28.149559"
+       id="text3852"><tspan
+         sodipodi:role="line"
+         id="tspan3850"
+         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:40.2267px;font-family:sans-serif;-inkscape-font-specification:sans-serif;fill:#ffffff;fill-opacity:1;stroke-width:0.419027"
+         x="8.0690212"
+         y="28.149559">x</tspan></text>
+  </g>
+</svg>
