@@ -42,7 +42,7 @@ jobs:
 
       - name: Run Innosetup Windows
         # Run innosetup and set application version to git tag
-        run: ../innosetup/ISCC.exe specs/windows_inno_setup.iss /DApplicationVersion=${{ env.GIT_TAG_NAME }}
+        run: C:\ProgramData\chocolatey\bin\ISCC.exe specs/windows_inno_setup.iss /DApplicationVersion=${{ env.GIT_TAG_NAME }}
 
       - name: Store windows installer as build artifact
         uses: actions/upload-artifact@v2
