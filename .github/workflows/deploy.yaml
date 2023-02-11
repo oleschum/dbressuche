@@ -40,7 +40,7 @@ jobs:
           # Arguments to pass to Chocolatey
           args: install innosetup --install-arguments="'/DIR=../innosetup'" --force
 
-      - name: Innosetup windows-terminservice
+      - name: Run Innosetup Windows
         # Run innosetup and set application version to git tag
         run: ../innosetup/ISCC.exe specs/windows_inno_setup.iss /DApplicationVersion=${{ env.GIT_TAG_NAME }}
 
