@@ -75,7 +75,7 @@ jobs:
         uses: papeloto/action-zip@v1
         with:
           files: dist/
-          dest: DBReservierungsSucheSetup.zip
+          dest: DBReservierungsSucheUbuntu.zip
       - name: Store ubuntu build artifact
         uses: actions/upload-artifact@v2
         with:

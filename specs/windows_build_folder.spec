@@ -27,7 +27,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="DeutscheBahnReservierungssuche",
-    icon='.\\assets\\app_icon.ico',
+    icon='..\\assets\\app_icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
