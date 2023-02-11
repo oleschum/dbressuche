@@ -24,20 +24,22 @@ Diese kleine Applikation bietet Abhilfe:
 
 ## Downloads
 
-> ⚠️ Firefox muss auf deinem PC installiert sein! Downlaod unter https://www.mozilla.org/de/firefox/new/
+> ⚠️ Firefox muss auf deinem PC installiert sein! Download unter https://www.mozilla.org/de/firefox/new/
 
 ###Windows
+
 Die Software kommt in einem praktischen Installer für dich.
 Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im Startmenü oder auf dem Desktop zu haben. 
 
-<a href="https://github.com/oleschum/dbressuche/issues">
+<a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheSetup.exe">
 <img width="60" height="50" src="https://upload.wikimedia.org/wikipedia/de/thumb/c/c2/Microsoft_Windows_7_logo.svg/2000px-Microsoft_Windows_7_logo.svg.png">
 </a>
 
 ###Ubuntu
+
 Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fertig für dich gebaut ist.
 
-<a href="https://github.com/oleschum/dbressuche/issues">
+<a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheUbuntu.zip">
 <img width="60" src=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/512px-UbuntuCoF.svg.png>
 </a>
 
@@ -45,6 +47,7 @@ Führe einfach `DeutscheBahnReservierungssuche` aus dem Ordner aus.
 
 
 ###Mac
+
 Aktuell gibt es noch keine Binaries für Mac.
 Du kannst dieses Repository klonen, die nötigen Python Packages installieren und dann die Applikation selbst aus Python
 heraus starten.
