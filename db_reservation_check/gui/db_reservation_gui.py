@@ -534,17 +534,18 @@ def search_reservations(search_params, result_queue, status_queue, headless=Fals
 def check_dependencies(result_queue: multiprocessing.Queue, done_event: multiprocessing.Event):
     try:
         from selenium import webdriver
+        from selenium.webdriver.firefox.service import Service as FirefoxService
         from selenium.webdriver.firefox.options import Options
-        import functools
-        # monkey patch Popen to avoid geckodriver console window in Windows
-        # https://stackoverflow.com/questions/57984953/how-to-hide-geckodriver-console-window
-        flag = 0x08000000  # No-Window flag
-        webdriver.common.service.subprocess.Popen = functools.partial(
-            webdriver.common.service.subprocess.Popen, creationflags=flag)
+        import platform
+        # no console window of geckodriver https://stackoverflow.com/a/71093078/3971621
+        firefox_service = FirefoxService()
+        if platform.system() == "Windows":
+            from subprocess import CREATE_NO_WINDOW
+            firefox_service.creation_flags = CREATE_NO_WINDOW
 
         browser_options = Options()
         browser_options.add_argument("-headless")
-        browser = webdriver.Firefox(options=browser_options)
+        browser = webdriver.Firefox(service=firefox_service, options=browser_options)
         browser.get("https://www.google.com")
         result_queue.put(True)
         browser.quit()

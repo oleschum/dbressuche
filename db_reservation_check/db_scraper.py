@@ -5,9 +5,10 @@ from enum import Enum
 import multiprocessing
 import signal
 import traceback
-import functools
+import platform
 
 from selenium import webdriver
+from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.common.by import By
@@ -16,12 +17,6 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from db_reservation_check.time_helper import compute_travel_time, TimeCheckResult, connection_in_time_interval
-
-# monkey patch Popen to avoid geckodriver console window in Windows
-# https://stackoverflow.com/questions/57984953/how-to-hide-geckodriver-console-window
-flag = 0x08000000  # No-Window flag
-webdriver.common.service.subprocess.Popen = functools.partial(
-    webdriver.common.service.subprocess.Popen, creationflags=flag)
 
 
 class ReservationOption(Enum):
@@ -135,7 +130,14 @@ class DBReservationScraper:
     def search_reservations(self, search_params: SearchParameters, result_queue: multiprocessing.Queue = None,
                             status_queue: multiprocessing.Queue = None):
         status_queue.put("Starte Suche...")
-        self.browser = webdriver.Firefox(options=self.browser_options)
+
+        # no console window of geckodriver https://stackoverflow.com/a/71093078/3971621
+        firefox_service = FirefoxService()
+        if platform.system() == "Windows":
+            from subprocess import CREATE_NO_WINDOW
+            firefox_service.creation_flags = CREATE_NO_WINDOW
+
+        self.browser = webdriver.Firefox(service=firefox_service, options=self.browser_options)
 
         all_parsed_connections = []
 
