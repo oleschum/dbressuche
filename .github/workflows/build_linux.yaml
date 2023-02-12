@@ -10,27 +10,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Install libicu
-        run: sudo apt install libicu70
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.2.*'
-          host: 'linux'
-          target: 'desktop'
-          dir: '${{ github.workspace }}/example/'
-          install-deps: 'true'
-          archives: 'qtbase qtsvg'
-          cache: 'false'
-          cache-key-prefix: 'install-qt-action'
-          setup-python: 'true'
-          tools: 'tools_ifw tools_qtcreator,qt.tools.qtcreator'
-          set-env: 'true'
-          tools-only: 'false'
-          aqtversion: '==2.1.*'
-          py7zrversion: '==0.19.*'
-          extra: '--external 7z'
+#      - name: Install Qt
+#        uses: jurplel/install-qt-action@v3
+#        with:
+#          version: '6.2.*'
+#          host: 'linux'
+#          target: 'desktop'
+#          dir: '${{ github.workspace }}/example/'
+#          install-deps: 'true'
+#          archives: 'qtbase qtsvg'
+#          cache: 'false'
+#          cache-key-prefix: 'install-qt-action'
+#          setup-python: 'true'
+#          tools: 'tools_ifw tools_qtcreator,qt.tools.qtcreator'
+#          set-env: 'true'
+#          tools-only: 'false'
+#          aqtversion: '==2.1.*'
+#          py7zrversion: '==0.19.*'
+#          extra: '--external 7z'
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -42,11 +39,11 @@ jobs:
           pip install -r requirements.txt
       - name: Build Linux
         run: pyinstaller --clean --noconfirm specs/linux_build_folder.spec
-      - name: Zip
-        uses: papeloto/action-zip@v1
+      - name: Zip Dist Folder
+        uses: thedoctor0/zip-release@0.7.1
         with:
-          files: dist/
-          dest: DBReservierungsSucheUbuntu.zip
+          path: dist/
+          filename: DBReservierungsSucheUbuntu.zip
       - name: Store ubuntu build artifact
         uses: actions/upload-artifact@v3
         with:
