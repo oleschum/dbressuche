@@ -52,16 +52,3 @@ jobs:
         with:
           name: DBReservierungsSuche-ubuntu
           path: DBReservierungsSucheUbuntu.zip
-
-  release:
-    runs-on: ubuntu-latest
-    needs: [build-windows, build-linux]
-    permissions: write-all
-    steps:
-      - name: Download build files
-        uses: actions/download-artifact@v2
-      - uses: marvinpinto/action-automatic-releases@latest
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          files: DBReservierungsSuche-ubuntu/DBReservierungsSucheUbuntu.zip
