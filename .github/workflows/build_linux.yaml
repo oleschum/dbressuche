@@ -13,6 +13,9 @@ jobs:
       - name: Install libEGL1
         run: sudo apt install libegl1
 
+      - name: Install libxcb-xinerama0
+        run: sudo apt install libxcb-xinerama0
+
 #      - name: Install Qt
 #        uses: jurplel/install-qt-action@v3
 #        with:
