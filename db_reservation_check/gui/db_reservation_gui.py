@@ -535,6 +535,13 @@ def check_dependencies(result_queue: multiprocessing.Queue, done_event: multipro
     try:
         from selenium import webdriver
         from selenium.webdriver.firefox.options import Options
+        import functools
+        # monkey patch Popen to avoid geckodriver console window in Windows
+        # https://stackoverflow.com/questions/57984953/how-to-hide-geckodriver-console-window
+        flag = 0x08000000  # No-Window flag
+        webdriver.common.service.subprocess.Popen = functools.partial(
+            webdriver.common.service.subprocess.Popen, creationflags=flag)
+
         browser_options = Options()
         browser_options.add_argument("-headless")
         browser = webdriver.Firefox(options=browser_options)

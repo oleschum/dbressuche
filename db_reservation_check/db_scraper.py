@@ -5,7 +5,7 @@ from enum import Enum
 import multiprocessing
 import signal
 import traceback
-import time
+import functools
 
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
@@ -16,6 +16,12 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from db_reservation_check.time_helper import compute_travel_time, TimeCheckResult, connection_in_time_interval
+
+# monkey patch Popen to avoid geckodriver console window in Windows
+# https://stackoverflow.com/questions/57984953/how-to-hide-geckodriver-console-window
+flag = 0x08000000  # No-Window flag
+webdriver.common.service.subprocess.Popen = functools.partial(
+    webdriver.common.service.subprocess.Popen, creationflags=flag)
 
 
 class ReservationOption(Enum):

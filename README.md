@@ -38,7 +38,17 @@ Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im 
 
 <a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheSetup.exe">Download </a>
 
+In manchen fällen warnt Windows, dass der Installer dem System nicht bekannt ist.
+Dieser Hinweis kann umgangen werden, indem durch zwei Klicks auf "**Weitere Informationen**" und "**Trotzdem ausführen**"
+Windows davon überzeugt wird, die Datei doch auszuführen.
 
+![Screenshot der APp](./assets/windows_smartscreen.png?raw=true "Screenshot")
+
+
+
+<a href="https://www.netzwelt.de/anleitung/178603-windows-10-so-deaktiviert-smartscreen-filter.html">Weitere Infos - Netzwelt.de</a>
+
+<a href="https://stackoverflow.com/questions/48946680/how-to-avoid-the-windows-defender-smartscreen-prevented-an-unrecognized-app-fro">Weitere Infos - Stackoverflow</a>
 
 ### Ubuntu
 
