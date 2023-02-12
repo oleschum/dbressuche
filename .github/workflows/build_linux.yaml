@@ -40,4 +40,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: DBReservierungsSuche-ubuntu
-          path: DBReservierungsSucheUbuntu.zip
+          path: dist/DBReservierungsSucheUbuntu.zip
