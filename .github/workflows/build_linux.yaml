@@ -16,6 +16,9 @@ jobs:
       - name: Install libxcb-xinerama0
         run: sudo apt install libxcb-xinerama0
 
+      - name: Install xcb deps
+        run: sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
+
 #      - name: Install Qt
 #        uses: jurplel/install-qt-action@v3
 #        with:
@@ -49,7 +52,7 @@ jobs:
       - name: Zip Dist Folder
         uses: thedoctor0/zip-release@0.7.1
         with:
-          path: dist/DeutscheBahnReservierungssuche
+          path: dist/DeutscheBahnReservierungssuche/
           filename: DBReservierungsSucheUbuntu.zip
       - name: Store ubuntu build artifact
         uses: actions/upload-artifact@v3
