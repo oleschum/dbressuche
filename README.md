@@ -29,24 +29,27 @@ Diese kleine Applikation bietet Abhilfe:
 
 ### Windows
 
-Die Software kommt in einem praktischen Installer für dich.
-Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im Startmenü oder auf dem Desktop zu haben. 
-
 <a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheSetup.exe">
 <img width="60" height="50" src="https://upload.wikimedia.org/wikipedia/de/thumb/c/c2/Microsoft_Windows_7_logo.svg/2000px-Microsoft_Windows_7_logo.svg.png">
 </a>
 
+Die Software kommt in einem praktischen Installer für dich.
+Folge einfach den Schritten des Installers, um nach wenigen Klicks Shortcuts im Startmenü oder auf dem Desktop zu haben.
+
+<a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheSetup.exe">Download </a>
+
+
 
 ### Ubuntu
-
-Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fertig für dich gebaut ist.
 
 <a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheUbuntu.zip">
 <img width="60" src=https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/UbuntuCoF.svg/512px-UbuntuCoF.svg.png>
 </a>
 
+Dir wird hier ein zip-Archiv zur Verfügung gestellt, in dem die Applikation fertig für dich gebaut ist.<br>
 Führe einfach `DeutscheBahnReservierungssuche` aus dem Ordner aus.
 
+<a href="https://github.com/oleschum/dbressuche/releases/latest/download/DBReservierungsSucheUbuntu.zip">Download </a>
 
 ### Mac
 

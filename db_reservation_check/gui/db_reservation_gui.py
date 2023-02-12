@@ -540,10 +540,10 @@ def check_dependencies(result_queue: multiprocessing.Queue, done_event: multipro
         browser = webdriver.Firefox(options=browser_options)
         browser.get("https://www.google.com")
         result_queue.put(True)
+        browser.quit()
     except Exception as e:
         result_queue.put(False)
     finally:
-        browser.quit()
         done_event.set()
 
 
