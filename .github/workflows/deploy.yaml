@@ -61,6 +61,9 @@ jobs:
       - name: Write version file
         run: echo ${{ env.GIT_TAG_NAME }} > version.txt
 
+     - name: Install libicu
+        run: sudo apt install libicu70
+
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
