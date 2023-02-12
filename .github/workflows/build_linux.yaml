@@ -16,27 +16,8 @@ jobs:
       - name: Install libxcb-xinerama0
         run: sudo apt-get install --reinstall libxcb-xinerama0 libxkbcommon0 libxkbcommon-x11-0
 
-      - name: Install xcb deps
-        run: sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
-
-#      - name: Install Qt
-#        uses: jurplel/install-qt-action@v3
-#        with:
-#          version: '6.2.*'
-#          host: 'linux'
-#          target: 'desktop'
-#          dir: '${{ github.workspace }}/example/'
-#          install-deps: 'true'
-#          archives: 'qtbase qtsvg'
-#          cache: 'false'
-#          cache-key-prefix: 'install-qt-action'
-#          setup-python: 'true'
-#          tools: 'tools_ifw tools_qtcreator,qt.tools.qtcreator'
-#          set-env: 'true'
-#          tools-only: 'false'
-#          aqtversion: '==2.1.*'
-#          py7zrversion: '==0.19.*'
-#          extra: '--external 7z'
+#      - name: Install xcb deps
+#        run: sudo apt-get install -y '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -52,7 +33,8 @@ jobs:
       - name: Zip Dist Folder
         uses: thedoctor0/zip-release@0.7.1
         with:
-          path: dist/DeutscheBahnReservierungssuche/
+          directory: dist
+          path: DeutscheBahnReservierungssuche
           filename: DBReservierungsSucheUbuntu.zip
       - name: Store ubuntu build artifact
         uses: actions/upload-artifact@v3
