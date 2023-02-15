@@ -1,5 +1,6 @@
 import sys
 import re
+import time
 from copy import deepcopy
 from enum import Enum
 import multiprocessing
@@ -100,6 +101,13 @@ class DBConnection:
     @start_date.setter
     def start_date(self, date: str):
         self._start_date = date
+
+
+def get_control():
+    if platform.system().lower() == "darwin":
+        return Keys.COMMAND
+    else:
+        return Keys.CONTROL
 
 
 class DBReservationScraper:
@@ -204,10 +212,13 @@ class DBReservationScraper:
 
     def _accept_cookies(self):
         try:
+            time.sleep(2)
+            css_selector = "button[class^='btn btn--secondary js-accept-essential-cookies']"
+            wait = WebDriverWait(self.browser, 5)
             div0 = self.browser.find_element(By.CSS_SELECTOR, "div")
             shadow_root = self.browser.execute_script("return arguments[0].shadowRoot.children", div0)
-            shadow_root[2].find_element(By.CSS_SELECTOR,
-                                        "button[class^='btn btn--secondary js-accept-essential-cookies']").click()
+            wait.until(EC.element_to_be_clickable(shadow_root[2].find_element(By.CSS_SELECTOR, css_selector)))
+            shadow_root[2].find_element(By.CSS_SELECTOR, css_selector).click()
         except:
             # cookies already accepted or dialog not found
             pass
@@ -321,12 +332,12 @@ class DBReservationScraper:
         wait = WebDriverWait(self.browser, 10)
         first_name_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id^='vorname']")))
 
-        first_name_input.send_keys(Keys.CONTROL + "a")
+        first_name_input.send_keys(get_control() + "a")
         first_name_input.send_keys(Keys.DELETE)
         first_name_input.send_keys("Bahnchef")
 
         last_name_input = self.browser.find_element(By.CSS_SELECTOR, "input[id^='nachname']")
-        last_name_input.send_keys(Keys.CONTROL + "a")
+        last_name_input.send_keys(get_control() + "a")
         last_name_input.send_keys(Keys.DELETE)
         last_name_input.send_keys("Lutz")
 
@@ -468,7 +479,7 @@ class DBReservationScraper:
         def set(path, val):
             elem = self.browser.find_element(By.XPATH, path)
             elem.click()
-            elem.send_keys(Keys.CONTROL + "a")
+            elem.send_keys(get_control() + "a")
             elem.send_keys(Keys.DELETE)
             elem.send_keys(val)
 
