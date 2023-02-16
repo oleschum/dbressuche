@@ -27,7 +27,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="DeutscheBahnReservierungssuche",
-    icon='./assets/app_icon.icns',
+    icon='../assets/app_icon.icns',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -63,7 +63,7 @@ coll = COLLECT(
 )
 app = BUNDLE(coll,
              name='DeutscheBahnReservierungssuche.app',
-             icon='./assets/app_icon.icns',
+             icon='../assets/app_icon.icns',
              bundle_identifier="com.yaf.dbreservation",
              info_plist={
                 'NSPrincipalClass': 'NSApplication',
