@@ -33,6 +33,12 @@ jobs:
       - name: Pyinstaller run mac_build_folder
         run: pyinstaller --clean --noconfirm specs/mac_build_folder.spec
 
+      - name: LS
+        run: ls -la dist/
+
+      - name: tree
+        run: tree .
+
       - name: Create DMG
         run: ./specs/mac_dmg_build.sh
 

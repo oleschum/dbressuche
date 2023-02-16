@@ -10,7 +10,7 @@ cp -r "dist/DeutscheBahnReservierungssuche.app" dist/dmg
 test -f "dist/DeutscheBahnReservierungssuche.dmg" && rm "dist/DeutscheBahnReservierungssuche.dmg"
 create-dmg \
   --volname "DeutscheBahnReservierungssuche" \
-  --volicon "./assets/app_icon.icns" \
+  --volicon "dist/DeutscheBahnReservierungssuche/assets/app_icon.icns" \
   --window-pos 200 120 \
   --window-size 600 300 \
   --icon-size 100 \
