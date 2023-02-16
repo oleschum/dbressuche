@@ -42,6 +42,7 @@ exe = EXE(
 
 excluded_binaries = [
         'libQt6WebEngineCore.so.6',
+        'QtWebEngineCore',
         'libQt5WebEngineCore.so.5',
         'PySide6/QtOpenGL.abi3.so',
         'libQt6Designer.so.6',

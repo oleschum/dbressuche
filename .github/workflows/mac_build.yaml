@@ -10,6 +10,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Make build dmg executable
+        run: chmod +x ./specs/mac_dmg_build.sh
       #- name: Install libEGL1
       #  run: sudo apt install libegl1
 
@@ -27,14 +32,25 @@ jobs:
           pip install -r requirements.txt
       - name: Pyinstaller run mac_build_folder
         run: pyinstaller --clean --noconfirm specs/mac_build_folder.spec
+
+      - name: Create DMG
+        run: ./specs/mac_dmg_build.sh
+
       - name: Zip Dist Folder
         uses: thedoctor0/zip-release@0.7.1
         with:
           directory: dist
           path: DeutscheBahnReservierungssuche
           filename: DBReservierungsSucheMacOS.zip
-      - name: Store macOS build artifact
+
+      - name: Store macOS build artifact ZIP
         uses: actions/upload-artifact@v3
         with:
           name: DBReservierungsSuche-macos
           path: dist/DBReservierungsSucheMacOS.zip
+
+      - name: Store macOS build artifact DMG
+          uses: actions/upload-artifact@v3
+          with:
+            name: DBReservierungsSuche-macos
+            path: dist/DeutscheBahnReservierungssuche.dmg
