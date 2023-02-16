@@ -1,4 +1,4 @@
-name: buildLinux
+name: buildMacOS
 
 on:
   workflow_dispatch:
