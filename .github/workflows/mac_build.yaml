@@ -1,0 +1,40 @@
+name: buildLinux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      #- name: Install libEGL1
+      #  run: sudo apt install libegl1
+
+      #- name: Install XCB deps
+      #  run: sudo apt-get install --reinstall libxcb-xinerama0 libxkbcommon0 libxkbcommon-x11-0 '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10.6
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Pyinstaller run linux_build_folder
+        run: pyinstaller --clean --noconfirm specs/mac_build_folder.spec
+      - name: Zip Dist Folder
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          directory: dist
+          path: DeutscheBahnReservierungssuche
+          filename: DBReservierungsSucheMacOS.zip
+      - name: Store macOS build artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: DBReservierungsSuche-macos
+          path: dist/DBReservierungsSucheMacOS.zip
