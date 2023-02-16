@@ -50,7 +50,7 @@ jobs:
           path: dist/DBReservierungsSucheMacOS.zip
 
       - name: Store macOS build artifact DMG
-          uses: actions/upload-artifact@v3
-          with:
-            name: DBReservierungsSuche-macos
-            path: dist/DeutscheBahnReservierungssuche.dmg
+        uses: actions/upload-artifact@v3
+        with:
+          name: DBReservierungsSuche-macos
+          path: dist/DeutscheBahnReservierungssuche.dmg
