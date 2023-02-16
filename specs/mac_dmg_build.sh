@@ -1,5 +1,4 @@
 #!/bin/sh
-cd ..
 # Create a folder (named dmg) to prepare our DMG in (if it doesn't already exist).
 mkdir -p dist/dmg
 # Empty the dmg folder.

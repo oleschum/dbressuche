@@ -36,6 +36,9 @@ jobs:
       - name: LS
         run: ls -la dist/
 
+      - name: install tree
+        run: brew install tree
+
       - name: tree
         run: tree .
 
