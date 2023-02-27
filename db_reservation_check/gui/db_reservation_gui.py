@@ -7,6 +7,7 @@ import threading
 from PySide6 import QtWidgets, QtCore, QtGui
 import qt_material
 
+import db_reservation_check
 from db_reservation_check.db_scraper import ReservationOption, DBReservationScraper, DBConnection, SearchParameters
 from db_reservation_check.gui.toggle_button import AnimatedToggle
 from db_reservation_check.gui.autocomplete_lineedit import AutocompleteLineEdit
@@ -14,6 +15,9 @@ from db_reservation_check.gui.color_calendar import ColorCalendarWidget
 from db_reservation_check.gui.tree_widget import ColoredBackgroundDelegate, CustomSortTreeWidgetItem
 from db_reservation_check.gui.text_shimmer_anim import TextShimmerAnimation
 from db_reservation_check.gui.status_icon import SearchStatusIcon
+from db_reservation_check.gui.card_view import CardView
+from db_reservation_check.time_helper import weekday_from_str
+from db_reservation_check.updater import is_up_to_date, internet_available
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
@@ -49,6 +53,28 @@ class ProcessListener(threading.Thread):
             time.sleep(0.2)
 
 
+class InternetCheckWorker(QtCore.QThread):
+    status_changed = QtCore.Signal(bool)
+
+    def run(self):
+        while True:
+            self.status_changed.emit(internet_available())
+            time.sleep(1)
+
+
+class DependencyStatus:
+    NO_INTERNET = -1
+    MISSING_FIREFOX = 0
+    SUCCESS = 1
+
+
+class QueryResults:
+
+    def __init__(self, search_params: SearchParameters, connections: list[DBConnection]):
+        self.search_params = search_params
+        self.connections = connections
+
+
 class DBScraperGui(QtWidgets.QMainWindow):
     new_connection = QtCore.Signal()
     new_status = QtCore.Signal()
@@ -60,6 +86,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         self.load_data()
         self.found_connections = []  # type: list[DBConnection]
+        self.past_queries = []  # type: list[QueryResults]
         self.current_search_params = SearchParameters()
         self.search_is_running = False
         self.current_error = ""
@@ -81,31 +108,6 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         self.vertical_layout = QtWidgets.QVBoxLayout()
         self.layout_grid = QtWidgets.QGridLayout()
-
-        self.menu_bar = QtWidgets.QMenuBar()
-
-        # Add menus to the menu bar
-        file_menu = QtWidgets.QMenu("Datei")
-        self.exit_action = QtGui.QAction("Beenden", self)
-        self.exit_action.triggered.connect(lambda: sys.exit(0))
-        file_menu.addAction(self.exit_action)
-
-        help_menu = QtWidgets.QMenu("Hilfe")
-        self.show_browser_action = QtGui.QAction("Webbrowser zeigen", self)
-        self.show_browser_action.setCheckable(True)
-        self.report_bug_action = QtGui.QAction("Fehler melden", self)
-        self.report_bug_action.triggered.connect(
-            lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://github.com/oleschum/dbressuche/issues")))
-        self.about_action = QtGui.QAction("Über", self)
-        self.about_action.triggered.connect(self.show_about_dialog)
-        help_menu.addAction(self.show_browser_action)
-        help_menu.addAction(self.report_bug_action)
-        help_menu.addAction(self.about_action)
-        self.menu_bar.addMenu(file_menu)
-        self.menu_bar.addMenu(help_menu)
-
-        # Add the menu bar to the main window
-        self.setMenuBar(self.menu_bar)
 
         self.start_station = AutocompleteLineEdit(self.stations)
         self.start_station.setPlaceholderText("Von")
@@ -218,27 +220,118 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.vertical_layout.addLayout(self.layout_grid)
         self.vertical_layout.setContentsMargins(10, 10, 10, 0)
 
+        self.prev_search_dock = QtWidgets.QDockWidget("Vorherige Suchen", self)
+        self.prev_search_dock.setMinimumWidth(300)
+        tmp_widget = QtWidgets.QWidget()
+        tmp_widget.setObjectName("main_widget_scrollarea")
+        layout = QtWidgets.QVBoxLayout()
+        layout.setObjectName("scroll_area_vertical_layout")
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        tmp_widget.setLayout(layout)
+        scroll_area = QtWidgets.QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(tmp_widget)
+        scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        # self.prev_search_dock.setWidget(tmp_widget)
+        self.prev_search_dock.setWidget(scroll_area)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self.prev_search_dock)
+        self.prev_search_dock.hide()
+
+        self.menu_bar = QtWidgets.QMenuBar()
+
+        # Add menus to the menu bar
+        file_menu = QtWidgets.QMenu("Datei")
+        self.exit_action = QtGui.QAction("Beenden", self)
+        self.exit_action.triggered.connect(lambda: sys.exit(0))
+        file_menu.addAction(self.exit_action)
+
+        view_menu = QtWidgets.QMenu("Ansicht")
+        view_menu.addAction(self.prev_search_dock.toggleViewAction())
+
+        help_menu = QtWidgets.QMenu("Hilfe")
+        self.show_browser_action = QtGui.QAction("Webbrowser zeigen", self)
+        self.show_browser_action.setCheckable(True)
+        self.report_bug_action = QtGui.QAction("Fehler melden", self)
+        self.report_bug_action.triggered.connect(
+            lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl("https://github.com/oleschum/dbressuche/issues")))
+        self.about_action = QtGui.QAction("Über", self)
+        self.about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(self.show_browser_action)
+        help_menu.addAction(self.report_bug_action)
+        help_menu.addAction(self.about_action)
+        self.menu_bar.addMenu(file_menu)
+        self.menu_bar.addMenu(view_menu)
+        self.menu_bar.addMenu(help_menu)
+
+        # Add the menu bar to the main window
+        self.setMenuBar(self.menu_bar)
+
         screen_size = QtGui.QScreen.availableGeometry(QtWidgets.QApplication.primaryScreen())
-        self.setGeometry((screen_size.width() - 1024) / 2, (screen_size.height() - 768) / 2, 1024, 768)
+        height = 768
+        width = 1024 + self.prev_search_dock.minimumWidth()
+        self.setGeometry((screen_size.width() - width) / 2, (screen_size.height() - height) / 2, width, height)
 
         self.setWindowTitle('Deutsche Bahn Reservierungssuche')
         self.search_status_icon = SearchStatusIcon()
         self.search_status_icon.callback_func = self.on_status_icon_clicked
         self.search_status_label = QtWidgets.QLabel(" - ")
+        self.update_info_label = QtWidgets.QLabel("")
+        self.update_info_label.setOpenExternalLinks(True)
+        self.update_info_label.setText(self.get_update_hint())
+        self.internet_connection_label = QtWidgets.QLabel("")
         self.statusBar().addWidget(self.search_status_icon)
         self.statusBar().addWidget(QtWidgets.QLabel("Aktuelle Suche:"))
         self.statusBar().addWidget(self.search_status_label)
+        self.statusBar().addPermanentWidget(self.update_info_label)
+        self.statusBar().addPermanentWidget(self.internet_connection_label)
         self.statusBar().setContentsMargins(0, 0, 0, 0)
         widget = QtWidgets.QWidget()
         widget.setLayout(self.vertical_layout)
         self.setCentralWidget(widget)
 
         self._check_dependencies()
-        # print(webdriver_okay)
+        self.internet_checker = InternetCheckWorker(self)
+        self.internet_checker.status_changed.connect(self.on_internet_status_changed)
+        self.internet_checker.start()
+
+    def _add_query(self):
+        query = QueryResults(self.current_search_params, [])
+        self.past_queries.append(query)
+        self._add_query_widget(query)
+
+    def _add_query_widget(self, query: QueryResults):
+        card_view = CardView(self.prev_search_dock, query)
+        headline_text = "{} -> {}".format(query.search_params.start_station, query.search_params.final_station)
+        card_view.headline_label.setText(headline_text)
+        weekday = weekday_from_str(query.search_params.travel_date)
+        info_text = "Abfahrt {}, {}; {}".format(weekday, query.search_params.travel_date,
+                                                query.search_params.earliest_dep_time)
+        if query.search_params.latest_dep_time != "":
+            info_text += " - {}".format(query.search_params.latest_dep_time)
+        card_view.text_label1.setText(info_text)
+        card_view.text_label2.setText("Gesucht um {}".format(query.search_params.search_started))
+        scroll_area = self.prev_search_dock.widget()
+        main_widget = scroll_area.findChild(QtWidgets.QWidget, name="main_widget_scrollarea")  # type: QtWidgets.QWidget
+        layout = scroll_area.findChild(QtWidgets.QVBoxLayout,
+                                       name="scroll_area_vertical_layout")  # type: QtWidgets.QVBoxLayout
+        layout.insertWidget(0, card_view)
+        layout.setAlignment(card_view, QtCore.Qt.AlignmentFlag.AlignTop)
+        main_widget.setLayout(layout)
+        if not self.prev_search_dock.isVisible():
+            self.prev_search_dock.show()
+
+        card_view.clicked.connect(self.on_prev_search_clicked)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self.internet_checker.terminate()
+        super().closeEvent(event)
 
     def create_search_params(self):
         search_params = SearchParameters()
-        search_params.travel_date = self.date_picker.date().toString("d.MM.yy")
+        t = time.localtime()
+        search_started = time.strftime("%H:%M:%S", t)
+        search_params.search_started = search_started
+        search_params.travel_date = self.date_picker.date().toString("dd.MM.yyyy")
         search_params.earliest_dep_time = self.earliest_time.time().toString("hh:mm")
         if self.use_latest_time.isChecked():
             search_params.latest_dep_time = self.latest_time.time().toString("hh:mm")
@@ -249,6 +342,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
         if self.num_reservations.currentIndex() == -1:
             self.num_reservations.setCurrentIndex(0)
         search_params.num_reservations = self.num_reservations.currentIndex() + 1  # plus one for start counting at zero
+        search_params.orig_num_reservations = self.num_reservations.currentIndex() + 1
         if self.reservation_option.currentText() == ReservationOption.KLEINKIND.value or \
                 self.reservation_option.currentText() == ReservationOption.FAMILIE.value:
             search_params.num_reservations += 1
@@ -271,11 +365,27 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
     def display_result_hint(self):
         if self.found_connections:
+            self.no_connections_label.hide()
             return
         font = self.no_connections_label.font()
         font.setPointSize(32)
         self.no_connections_label.setFont(font)
         self.no_connections_label.show()
+
+    def get_update_hint(self):
+        if is_up_to_date():
+            return ""
+        else:
+            gh_url = "https://github.com/oleschum/dbressuche/releases/latest/"
+            return "Neue Version verfügbar: <a href='{}'>Download</a>".format(gh_url)
+
+    def on_internet_status_changed(self, status: bool):
+        if status:
+            self.search_button.setEnabled(True)
+            self.internet_connection_label.setText("")
+        else:
+            self.search_button.setEnabled(False)
+            self.internet_connection_label.setText("Kein Internet verfügbar.")
 
     def on_dependency_check_done(self):
         check_passed = self.dependency_check_queue.get(block=False)
@@ -283,18 +393,25 @@ class DBScraperGui(QtWidgets.QMainWindow):
             self.dep_check_process_listener.my_stop_event.set()
             self.dep_check_process_listener.join()
             self.dep_check_process_listener = None
-        if not check_passed:
+        if check_passed == DependencyStatus.MISSING_FIREFOX:
             header_text = """<p align='center'><font size='5'><b>Entschuldige die Störung!</b></font></p>"""
             about_text = "<font size='3'>Zur Nutzung dieser Software muss der Firefox Browser installiert sein.<br>" \
                          "Es scheint, als sei dieser bei dir nicht vorhanden.<br>" \
                          "Bitte lade dir diesen herunter, installier ihn und starte dann das Programm neu." \
-                         '<p align="center"><a href="https://www.mozilla.org/de/firefox/browsers/">Download</a></font></p>' \
-                         "Falls Firefox bei dir schon installiert ist, prüfe bitte deine Internetverbindung.<br>"
+                         '<p align="center"><a href="https://www.mozilla.org/de/firefox/browsers/">Download</a></font></p>'
+            self.show_error_dialog(header_text, about_text)
+        elif check_passed == DependencyStatus.NO_INTERNET:
+            header_text = """<p align='center'><font size='5'><b>Entschuldige die Störung!</b></font></p>"""
+            about_text = "<font size='3'>Es scheint als hättest du gerade kein Internet.<br>" \
+                         "Das tut mir leid.<br>" \
+                         "Bitte prüfe deine Internetverbindung, bevor du eine Suche startest. </font>"
             self.show_error_dialog(header_text, about_text)
 
     def on_new_connection(self, result_queue: multiprocessing.Queue):
         connection = result_queue.get(block=False)  # type: DBConnection
         self.found_connections.append(connection)
+        if len(self.past_queries) > 0:
+            self.past_queries[-1].connections.append(connection)
         self.insert_connection(connection)
 
     def on_new_status(self):
@@ -306,6 +423,39 @@ class DBScraperGui(QtWidgets.QMainWindow):
             self.search_status_icon.setFailure()
         else:
             self.search_status_label.setText(res)
+
+    def on_prev_search_clicked(self, query: QueryResults):
+        if self.search_is_running:
+            dialog = QtWidgets.QMessageBox()
+            res = dialog.question(self, "Aktuelle Suche abbrechen?",
+                                  "Im Moment läuft noch eine Suche. Soll diese abgebrochen werden?",
+                                  QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.Yes)
+            if res == QtWidgets.QMessageBox.StandardButton.No:
+                return
+            self.on_search_done()
+            self.reset_status_icon()
+        self.current_search_params = query.search_params
+        self.found_connections = query.connections
+        self.update_connection_list()
+        self.display_result_hint()
+
+        self.start_station.setText(query.search_params.start_station)
+        self.final_station.setText(query.search_params.final_station)
+        qdate = QtCore.QDate.fromString(query.search_params.travel_date, "dd.MM.yyyy")
+        self.date_picker.setDate(qdate)
+
+        qtime = QtCore.QTime.fromString(query.search_params.earliest_dep_time, "hh:mm")
+        self.earliest_time.setTime(qtime)
+
+        if query.search_params.latest_dep_time != "":
+            self.use_latest_time.setChecked(True)
+            qtime = QtCore.QTime.fromString(query.search_params.latest_dep_time, "hh:mm")
+            self.latest_time.setTime(qtime)
+        else:
+            self.use_latest_time.setChecked(False)
+
+        self.reservation_option.setCurrentText(query.search_params.reservation_category.value)
+        self.num_reservations.setCurrentIndex(query.search_params.orig_num_reservations - 1)
 
     def on_search_done(self):
         self.reset_search_process()
@@ -334,6 +484,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
             self.tree_widget.clear()
             self.show_wait_symbol()
             self.found_connections = []
+            self._add_query()
 
             headless_mode = not self.show_browser_action.isChecked()
             done_event = multiprocessing.Event()
@@ -369,7 +520,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
     def show_about_dialog(self):
         dialog = QtWidgets.QDialog()
-
+        version = db_reservation_check.__version__
         about_text = """
         <p align='center'><font size='5'><b>DB Reservierungssuche</b></font></p><br>
     
@@ -382,9 +533,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
         Alle Angaben ohne Gewähr.<br>
         Über diese Applikation sind keine Buchungen oder Reservierungen möglich.<br><br>
         
-        Erstellt von Ole Schumann, 2023.<br>
-        Abbildungen wurden durch DALL-E (OpenAI) erstellt.</font> 
-        """
+        Erstellt von Ole Schumann, 2023.<br>""" + \
+                     "Version {}<br>".format(version) + \
+                     """Abbildungen wurden durch DALL-E (OpenAI) erstellt.</font> 
+                     """
         text_label = QtWidgets.QLabel()
         text_label.setTextFormat(QtCore.Qt.TextFormat.RichText)
         text_label.setText(about_text)
@@ -532,6 +684,11 @@ def search_reservations(search_params, result_queue, status_queue, headless=Fals
 
 
 def check_dependencies(result_queue: multiprocessing.Queue, done_event: multiprocessing.Event):
+    browser = None
+    if not internet_available():
+        result_queue.put(DependencyStatus.NO_INTERNET)
+        done_event.set()
+        return
     try:
         from selenium import webdriver
         from selenium.webdriver.firefox.service import Service as FirefoxService
@@ -547,10 +704,12 @@ def check_dependencies(result_queue: multiprocessing.Queue, done_event: multipro
         browser_options.add_argument("-headless")
         browser = webdriver.Firefox(service=firefox_service, options=browser_options)
         browser.get("https://www.google.com")
-        result_queue.put(True)
+        result_queue.put(DependencyStatus.SUCCESS)
         browser.quit()
     except Exception as e:
-        result_queue.put(False)
+        if browser is not None:
+            browser.quit()
+        result_queue.put(DependencyStatus.MISSING_FIREFOX)
     finally:
         done_event.set()
 
@@ -568,6 +727,9 @@ def start_gui():
         "}}" \
         "QPushButton:pressed {{" \
         "background-color: {QTMATERIAL_PRIMARYLIGHTCOLOR};" \
+        "}}" \
+        "QPushButton:disabled {{" \
+        "background-color: #777777;" \
         "}}".format(**os.environ) \
         + \
         """

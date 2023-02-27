@@ -9,6 +9,10 @@ class TimeCheckResult:
     START_TOO_LATE = 4
 
 
+def weekday_from_str(date_str: str) -> str:
+    datetime_object = datetime.strptime(date_str, "%d.%m.%Y").date()
+    return datetime_object.strftime("%A")
+
 def get_time_diff(time1: str, time2: str, fmt="%H:%M") -> timedelta:
     """
     Compute the difference between the two time time1 and time2, i.e. time1 - time2
@@ -44,8 +48,8 @@ def compute_travel_time(start_time: str, end_time: str, fmt="%H:%M") -> tuple[in
 
 
 def connection_in_time_interval(connection, search_params) -> int:
-    date_connection = datetime.strptime(connection.start_date, "%d.%m.%y").date()
-    date_search = datetime.strptime(search_params.travel_date, "%d.%m.%y").date()
+    date_connection = datetime.strptime(connection.start_date, "%d.%m.%Y").date()
+    date_search = datetime.strptime(search_params.travel_date, "%d.%m.%Y").date()
     if date_connection < date_search:
         return TimeCheckResult.DATE_TOO_EARLY
     if date_connection > date_search:

@@ -31,14 +31,16 @@ class ReservationOption(Enum):
 class SearchParameters:
 
     def __init__(self):
-        self.travel_date = ""  # format DD.mm.YY
+        self.travel_date = ""  # format dd.mm.yyyy
         self.earliest_dep_time = ""  # format HH:MM
         self.latest_dep_time = ""  # format HH:MM
         self.start_station = ""
         self.final_station = ""
         self.num_reservations = 1
+        self.orig_num_reservations = 1  # dropdown selection, different due to non counted children below 5
         self.reservation_category = ReservationOption.KLEINKIND
         self.only_direct_connections = False
+        self.search_started = ""  # format HH:MM:SS
 
 
 class Train:
@@ -124,12 +126,9 @@ class DBReservationScraper:
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
     def exit_gracefully(self, *args):
-        # print("in exit gracefully")
         self.killed = True
         if self.browser is not None:
-            # print("Browser found, killing it", self.browser.service.process.pid)
             self.browser.quit()
-            # print("Before sys exit")
             if self.done_event is not None:
                 self.done_event.set()
             sys.exit(0)
@@ -490,7 +489,9 @@ class DBReservationScraper:
         pattern = re.compile(r"\d{2}\.\d{2}\.\d{2}", re.IGNORECASE)  # search for date in format DD.mm.YY
         res = pattern.search(element.text)
         if res:
-            return res.group()
+            # convert DD.mm.YY format into DD.mm.YYYY format
+            date_str = res.group()
+            return date_str[:-2] + "20" + date_str[-2:]
         else:
             return ""
 
@@ -556,7 +557,7 @@ def main():
     search_params.final_station = "Stuttgart Hbf"
     search_params.earliest_dep_time = "10:00"
     search_params.latest_dep_time = "21:47"
-    search_params.travel_date = "01.01.23"
+    search_params.travel_date = "01.01.2023"
     search_params.reservation_category = ReservationOption.KLEINKIND
     search_params.num_reservations = 2
 

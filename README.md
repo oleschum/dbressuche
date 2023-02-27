@@ -2,8 +2,8 @@
 
 ![Screenshot der APp](./assets/DBReservierungssuche.png?raw=true "Screenshot")
 
-Hallo Reisender! <br>
-Du bist auf der Suche nach einer Verbindung von *A* nach *B*,
+Hallo Reisende! <br>
+Bist Du auf der Suche nach einer Verbindung von *A* nach *B*,
 möchtest dabei aber unbedingt eine bestimmte Sitzplatzkategorie reservieren (z.B. das **Kleinkindabteil**)?
 
 Leider bietet die Deutsche Bahn auf ihrer Website diese Suchfunktion nicht direkt an.<br>
