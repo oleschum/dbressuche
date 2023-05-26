@@ -540,14 +540,14 @@ class DBReservationScraper:
         return relevant_connections, latest_connection_found
 
     def _set_travelers(self, search_params: SearchParameters):
-        num_travelers_xpath = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[4]/div/div[2]/select/option[{}]".format(
+        num_travelers_xpath = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[3]/div/div[2]/select/option[{}]".format(
             search_params.num_reservations)
 
         self.browser.find_element(By.XPATH, num_travelers_xpath).click()
 
         if search_params.reservation_category == ReservationOption.KLEINKIND or \
                 search_params.reservation_category == ReservationOption.FAMILIE:
-            age_second_traveler_path = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[4]/div/div[4]/div[3]/div/div[2]/div/select/option[1]"
+            age_second_traveler_path = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[3]/div/div[4]/div[3]/div/div[2]/div/select/option[1]"
             self.browser.find_element(By.XPATH, age_second_traveler_path).click()
 
 
