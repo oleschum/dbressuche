@@ -1,5 +1,6 @@
 import os
 import json
+import random
 import sys
 import time
 import multiprocessing
@@ -8,15 +9,16 @@ from PySide6 import QtWidgets, QtCore, QtGui
 import qt_material
 
 import db_reservation_check
-from db_reservation_check.db_scraper import ReservationOption, DBReservationScraper, DBConnection, SearchParameters
+from db_reservation_check.db_scraper import ReservationOption, DBReservationScraper, DBConnection, SearchParameters, \
+    TravelClass
 from db_reservation_check.gui.toggle_button import AnimatedToggle
 from db_reservation_check.gui.autocomplete_lineedit import AutocompleteLineEdit
 from db_reservation_check.gui.color_calendar import ColorCalendarWidget
-from db_reservation_check.gui.tree_widget import ColoredBackgroundDelegate, CustomSortTreeWidgetItem
-from db_reservation_check.gui.text_shimmer_anim import TextShimmerAnimation
+from db_reservation_check.gui.tree_widget import ResultWidget
 from db_reservation_check.gui.status_icon import SearchStatusIcon
-from db_reservation_check.gui.card_view import CardView
-from db_reservation_check.time_helper import weekday_from_str
+from db_reservation_check.gui.traveler_selection import TravelerSelection
+from db_reservation_check.gui.expander import Expander
+from db_reservation_check.gui.past_searches import PastSearches, QueryResults
 from db_reservation_check.updater import is_up_to_date, internet_available
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -68,13 +70,6 @@ class DependencyStatus:
     SUCCESS = 1
 
 
-class QueryResults:
-
-    def __init__(self, search_params: SearchParameters, connections: list[DBConnection]):
-        self.search_params = search_params
-        self.connections = connections
-
-
 class DBScraperGui(QtWidgets.QMainWindow):
     new_connection = QtCore.Signal()
     new_status = QtCore.Signal()
@@ -84,9 +79,9 @@ class DBScraperGui(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.station_data = {}
         self.load_data()
         self.found_connections = []  # type: list[DBConnection]
-        self.past_queries = []  # type: list[QueryResults]
         self.current_search_params = SearchParameters()
         self.search_is_running = False
         self.current_error = ""
@@ -109,11 +104,11 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.vertical_layout = QtWidgets.QVBoxLayout()
         self.layout_grid = QtWidgets.QGridLayout()
 
-        self.start_station = AutocompleteLineEdit(self.stations)
+        self.start_station = AutocompleteLineEdit(list(self.station_data.keys()))
         self.start_station.setPlaceholderText("Von")
         self.start_station.setToolTip("Von")
         self.start_station.setMinimumHeight(self._widget_min_height)
-        self.final_station = AutocompleteLineEdit(self.stations)
+        self.final_station = AutocompleteLineEdit(list(self.station_data.keys()))
         self.final_station.setPlaceholderText("Nach")
         self.final_station.setToolTip("Nach")
         self.final_station.setMinimumHeight(self._widget_min_height)
@@ -159,81 +154,86 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.earliest_time.setTime(QtCore.QTime.currentTime())
         self.layout_grid.addWidget(self.earliest_time, 1, 3)
 
-        # self.layout_grid.addWidget(QtWidgets.QLabel("Späteste Abfahrt"), 2, 1)
-        hlayout = QtWidgets.QHBoxLayout()
-        hlayout.addWidget(QtWidgets.QLabel("Späteste Abfahrt begrenzen"), stretch=0,
-                          alignment=QtCore.Qt.AlignmentFlag.AlignRight)
-        self.use_latest_time = AnimatedToggle(checked_color="#ec0016", pulse_checked_color="#44ec0016", )
-        self.use_latest_time.setSizePolicy(
-            QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed))
-        hlayout.addWidget(self.use_latest_time)
-        self.layout_grid.addLayout(hlayout, 2, 1, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
-        self.latest_time = QtWidgets.QTimeEdit()
-        self.latest_time.setMinimumHeight(self._widget_min_height)
-        self.latest_time.setToolTip("Späteste Abfahrt")
-        self.latest_time.setTime(
-            QtCore.QTime(QtCore.QTime.currentTime().hour() + 1, QtCore.QTime.currentTime().minute()))
-        self.latest_time.setEnabled(False)
-
-        self.use_latest_time.stateChanged.connect(lambda x: self.latest_time.setEnabled(x))
-
-        self.layout_grid.addWidget(self.latest_time, 2, 3)
-
-        # self.layout_grid.addWidget(QtWidgets.QLabel("Anzahl Personen\n(ohne Kleinkind)"), 3, 0)
-        self.num_reservations = QtWidgets.QComboBox()
-        self.num_reservations.setMinimumHeight(self._widget_min_height)
-        self.num_reservations.setPlaceholderText("Anzahl Personen (ohne Kleinkind)")
-        self.num_reservations.setToolTip("Anzahl Personen (ohne Kleinkind)")
-        self.num_reservations.addItems(["1 Person", "2 Personen", "3 Personen", "4 Personen", "5 Personen"])
-        self.layout_grid.addWidget(self.num_reservations, 3, 1)
-
+        self.layout_grid.addWidget(QtWidgets.QLabel("Reservierungswunsch"), 3, 1,
+                                   alignment=QtCore.Qt.AlignmentFlag.AlignRight)
         self.reservation_option = QtWidgets.QComboBox()
         self.reservation_option.setMinimumHeight(self._widget_min_height)
         self.reservation_option.setToolTip("Reservierungsoption")
         self.reservation_option.addItems([x.value for x in ReservationOption if x != ReservationOption.NONE])
+        self.reservation_option.setCurrentIndex(2)
         self.layout_grid.addWidget(self.reservation_option, 3, 3)
+
         self.search_button = QtWidgets.QPushButton("Suchen")
         self.search_button.setMinimumHeight(self._widget_min_height)
         self.search_button.setStyleSheet("QPushButton {font-family: Martel; font-size:18px;}")
         self.search_button.clicked.connect(self.on_search_clicked)
         self.layout_grid.addWidget(self.search_button, 5, 0, 1, 4)
 
-        self.tree_widget = QtWidgets.QTreeWidget(self)
-        self.tree_widget.setHeaderLabels(("Reisezeit", "Dauer", "Umstiege", "Züge", "Reservierung"))
-        self.tree_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
-        self.tree_widget.setItemDelegate(ColoredBackgroundDelegate(self))
-        column_widths = [150, 100, 300, 200, 200]
-        for i in range(self.tree_widget.columnCount()):
-            self.tree_widget.setColumnWidth(i, column_widths[i])
-        self.tree_widget.setSortingEnabled(True)
+        ext_settings = Expander(parent=self, title="Erweiterte Einstellungen")
 
-        self.layout_grid.addWidget(self.tree_widget, 6, 0, 1, 4)
+        ext_settings_layout = QtWidgets.QHBoxLayout()
+        ext_settings_layout.addWidget(QtWidgets.QLabel("Späteste Abfahrt begrenzen"), stretch=0,
+                                      alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self.use_latest_time = AnimatedToggle(checked_color="#ec0016", pulse_checked_color="#44ec0016")
+        self.use_latest_time.setSizePolicy(
+            QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed))
+        ext_settings_layout.addWidget(self.use_latest_time)
+        self.latest_time = QtWidgets.QTimeEdit()
+        self.latest_time.setMinimumHeight(self._widget_min_height)
+        self.latest_time.setToolTip("Späteste Abfahrt")
+        self.latest_time.setTime(
+            QtCore.QTime(QtCore.QTime.currentTime().hour() + 1, QtCore.QTime.currentTime().minute()))
+        self.latest_time.setEnabled(False)
+        ext_settings_layout.addWidget(self.latest_time)
+
+        self.use_latest_time.stateChanged.connect(lambda x: self.latest_time.setEnabled(x))
+
+        ext_settings_layout.addWidget(QtWidgets.QLabel("Schnellste Verbindungen"), stretch=0,
+                                      alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self.only_fast_connections = AnimatedToggle(checked_color="#ec0016", pulse_checked_color="#44ec0016")
+        self.only_fast_connections.setSizePolicy(
+            QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed))
+        ext_settings_layout.addWidget(self.only_fast_connections)
+
+        ext_settings_layout.addWidget(QtWidgets.QLabel("Nur direkte Verbindungen"), stretch=0,
+                                      alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self.only_dircect_connections = AnimatedToggle(checked_color="#ec0016", pulse_checked_color="#44ec0016")
+        self.only_dircect_connections.setSizePolicy(
+            QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed))
+        ext_settings_layout.addWidget(self.only_dircect_connections)
+
+        ext_settings_layout.addWidget(QtWidgets.QLabel("Reisen in Klasse:"), stretch=0,
+                                      alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        self.travel_class = QtWidgets.QComboBox(self)
+        self.travel_class.addItems(["Erste Klasse", "Zweite Klasse"])
+        self.travel_class.setItemData(0, TravelClass.FIRST)
+        self.travel_class.setItemData(1, TravelClass.SECOND)
+        self.travel_class.setCurrentIndex(1)
+        ext_settings_layout.addWidget(self.travel_class)
+
+        ext_settings.setContentLayout(ext_settings_layout)
+        self.layout_grid.addWidget(ext_settings, 6, 0, 1, 4)
+
+        self.result_widget = ResultWidget()
+
+        self.layout_grid.addWidget(self.result_widget, 7, 0, 1, 4)
 
         self.no_connections_label = QtWidgets.QLabel("Keine reservierbaren\nVerbindungen gefunden")
         self.no_connections_label.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.no_connections_label.hide()
 
-        self.layout_grid.addWidget(self.no_connections_label, 6, 0, 1, 4)
+        self.layout_grid.addWidget(self.no_connections_label, 7, 0, 1, 4)
 
         self.layout_grid.setVerticalSpacing(10)
         self.vertical_layout.addLayout(self.layout_grid)
         self.vertical_layout.setContentsMargins(10, 10, 10, 0)
 
-        self.prev_search_dock = QtWidgets.QDockWidget("Vorherige Suchen", self)
-        self.prev_search_dock.setMinimumWidth(300)
-        tmp_widget = QtWidgets.QWidget()
-        tmp_widget.setObjectName("main_widget_scrollarea")
-        layout = QtWidgets.QVBoxLayout()
-        layout.setObjectName("scroll_area_vertical_layout")
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-        tmp_widget.setLayout(layout)
-        scroll_area = QtWidgets.QScrollArea(self)
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setWidget(tmp_widget)
-        scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        # self.prev_search_dock.setWidget(tmp_widget)
-        self.prev_search_dock.setWidget(scroll_area)
+        self.traveler_selection = TravelerSelection("Reisende", self)
+        self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self.traveler_selection)
+        self.traveler_selection.show()
+
+        self.prev_search_dock = PastSearches("Vorherige Suchen", self)
         self.addDockWidget(QtCore.Qt.DockWidgetArea.RightDockWidgetArea, self.prev_search_dock)
         self.prev_search_dock.hide()
 
@@ -247,6 +247,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         view_menu = QtWidgets.QMenu("Ansicht")
         view_menu.addAction(self.prev_search_dock.toggleViewAction())
+        view_menu.addAction(self.traveler_selection.toggleViewAction())
 
         help_menu = QtWidgets.QMenu("Hilfe")
         self.show_browser_action = QtGui.QAction("Webbrowser zeigen", self)
@@ -268,8 +269,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         screen_size = QtGui.QScreen.availableGeometry(QtWidgets.QApplication.primaryScreen())
         height = 768
-        width = 1024 + self.prev_search_dock.minimumWidth()
+        width = 1224 + self.traveler_selection.minimumWidth()
         self.setGeometry((screen_size.width() - width) / 2, (screen_size.height() - height) / 2, width, height)
+
+        self.resizeDocks((self.traveler_selection,), (400,), QtCore.Qt.Orientation.Horizontal)
 
         self.setWindowTitle('Deutsche Bahn Reservierungssuche')
         self.search_status_icon = SearchStatusIcon()
@@ -294,34 +297,6 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.internet_checker.status_changed.connect(self.on_internet_status_changed)
         self.internet_checker.start()
 
-    def _add_query(self):
-        query = QueryResults(self.current_search_params, [])
-        self.past_queries.append(query)
-        self._add_query_widget(query)
-
-    def _add_query_widget(self, query: QueryResults):
-        card_view = CardView(self.prev_search_dock, query)
-        headline_text = "{} -> {}".format(query.search_params.start_station, query.search_params.final_station)
-        card_view.headline_label.setText(headline_text)
-        weekday = weekday_from_str(query.search_params.travel_date)
-        info_text = "Abfahrt {}, {}; {}".format(weekday, query.search_params.travel_date,
-                                                query.search_params.earliest_dep_time)
-        if query.search_params.latest_dep_time != "":
-            info_text += " - {}".format(query.search_params.latest_dep_time)
-        card_view.text_label1.setText(info_text)
-        card_view.text_label2.setText("Gesucht um {}".format(query.search_params.search_started))
-        scroll_area = self.prev_search_dock.widget()
-        main_widget = scroll_area.findChild(QtWidgets.QWidget, name="main_widget_scrollarea")  # type: QtWidgets.QWidget
-        layout = scroll_area.findChild(QtWidgets.QVBoxLayout,
-                                       name="scroll_area_vertical_layout")  # type: QtWidgets.QVBoxLayout
-        layout.insertWidget(0, card_view)
-        layout.setAlignment(card_view, QtCore.Qt.AlignmentFlag.AlignTop)
-        main_widget.setLayout(layout)
-        if not self.prev_search_dock.isVisible():
-            self.prev_search_dock.show()
-
-        card_view.clicked.connect(self.on_prev_search_clicked)
-
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self.internet_checker.terminate()
         super().closeEvent(event)
@@ -338,16 +313,15 @@ class DBScraperGui(QtWidgets.QMainWindow):
         else:
             search_params.latest_dep_time = ""
         search_params.start_station = self.start_station.text()
+        search_params.start_station_id = self.station_data.get(search_params.start_station, {}).get("id", 0)
         search_params.final_station = self.final_station.text()
-        if self.num_reservations.currentIndex() == -1:
-            self.num_reservations.setCurrentIndex(0)
-        search_params.num_reservations = self.num_reservations.currentIndex() + 1  # plus one for start counting at zero
-        search_params.orig_num_reservations = self.num_reservations.currentIndex() + 1
-        if self.reservation_option.currentText() == ReservationOption.KLEINKIND.value or \
-                self.reservation_option.currentText() == ReservationOption.FAMILIE.value:
-            search_params.num_reservations += 1
-            search_params.num_reservations = min(search_params.num_reservations, 5)
+        search_params.final_station_id = self.station_data.get(search_params.final_station, {}).get("id", 0)
         search_params.reservation_category = ReservationOption(self.reservation_option.currentText())
+        search_params.travel_class = self.travel_class.currentData()
+        search_params.only_fast_connections = self.only_fast_connections.isChecked()
+        search_params.only_direct_connections = self.only_dircect_connections.isChecked()
+        search_params.passengers = self.traveler_selection.get_passengers()
+
         return search_params
 
     def _check_dependencies(self):
@@ -410,9 +384,8 @@ class DBScraperGui(QtWidgets.QMainWindow):
     def on_new_connection(self, result_queue: multiprocessing.Queue):
         connection = result_queue.get(block=False)  # type: DBConnection
         self.found_connections.append(connection)
-        if len(self.past_queries) > 0:
-            self.past_queries[-1].connections.append(connection)
-        self.insert_connection(connection)
+        self.prev_search_dock.add_new_connection(connection)
+        self.result_widget.insert_connection(connection, self.current_search_params)
 
     def on_new_status(self):
         res = self.status_queue.get(block=False)
@@ -454,20 +427,71 @@ class DBScraperGui(QtWidgets.QMainWindow):
         else:
             self.use_latest_time.setChecked(False)
 
+        self.only_dircect_connections.setChecked(query.search_params.only_direct_connections)
+        self.only_fast_connections.setChecked(query.search_params.only_fast_connections)
+
         self.reservation_option.setCurrentText(query.search_params.reservation_category.value)
-        self.num_reservations.setCurrentIndex(query.search_params.orig_num_reservations - 1)
+        self.travel_class.setCurrentIndex(query.search_params.travel_class.value - 1)
 
     def on_search_done(self):
         self.reset_search_process()
         self.search_button.setText("Suchen")
         self.search_is_running = False
-        self.hide_wait_symbol()
+        self.result_widget.hide_wait_symbol()
         self.display_result_hint()
         self.search_status_label.setText(" - ")
         while not self.status_queue.empty():
             self.status_queue.get_nowait()
 
     def on_search_clicked(self):
+
+        from db_reservation_check.db_scraper import Train, ReservationInformation, ReservationOption
+        connection = DBConnection()
+        connection.travel_duration = "02:23"
+        connection.start_time = "08:23"
+        connection.end_time = "19:23"
+        connection.start_station = "Hannover"
+        connection.final_station = "ASD"
+
+        pce = random.randint(20, 200)
+        connection.price_information={"Flexpreis": "159,95€", "Sparpreis": f"{pce},23€", "Super Sparpreis": "48,12€"}
+        train = Train()
+        train.travel_duration = "01:00"
+        train.start_station = "asd1"
+        train.final_station = "asd2"
+        train.end_time = "12:00"
+        train.start_time = "11:00"
+        train.reservation_information = ReservationInformation()
+        train.reservation_information.info_available = True
+        train.reservation_information.total_seats = 213
+        train.reservation_information.total_seats_free = 123
+        train.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 120, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
+        train.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
+        train.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 10, "total": 25,
+                                                                                "wagon": set(["9"])}
+
+        train2 = Train()
+        train2.travel_duration = "11:00"
+        train2.start_station = "asd3"
+        train2.final_station = "asd4"
+        train2.end_time = "14:00"
+        train2.start_time = "15:00"
+        train2.reservation_information = ReservationInformation()
+        train2.reservation_information.info_available = True
+        train2.reservation_information.total_seats = 213
+        train2.reservation_information.total_seats_free = 123
+        train2.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 120, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
+        train2.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
+        train2.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 0, "total": 25,
+                                                                              "wagon": set(["9"])}
+
+        connection.trains = [train, train2]
+
+        self.current_search_params = self.create_search_params()
+        self.result_widget.insert_connection(connection, self.current_search_params)
+
+        return
+
         if self.search_is_running:
             self.on_search_done()
             self.reset_status_icon()
@@ -481,10 +505,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
                 return
             self.search_is_running = True
             self.search_button.setText("Abbrechen")
-            self.tree_widget.clear()
-            self.show_wait_symbol()
+            self.result_widget.clear()
+            self.result_widget.show_wait_symbol()
             self.found_connections = []
-            self._add_query()
+            self.prev_search_dock.add_query(self.current_search_params, self.on_prev_search_clicked)
 
             headless_mode = not self.show_browser_action.isChecked()
             done_event = multiprocessing.Event()
@@ -593,28 +617,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         dialog.exec()
 
-    def show_wait_symbol(self):
-        data_columns = tuple(["" for _ in range(self.tree_widget.columnCount())])
-
-        item = CustomSortTreeWidgetItem(data_columns)
-        item.sortable = False
-        self.tree_widget.insertTopLevelItem(0, item)
-
-        for i in range(self.tree_widget.columnCount()):
-            shimmer = TextShimmerAnimation(self, int(self.tree_widget.columnWidth(i) * 0.75), 15)
-            self.tree_widget.setItemWidget(item, i, shimmer)
-            shimmer.anim_start()
-
-    def hide_wait_symbol(self):
-        for idx in range(self.tree_widget.topLevelItemCount()):
-            item = self.tree_widget.topLevelItem(idx)
-            widget = self.tree_widget.itemWidget(item, 0)
-            if isinstance(widget, TextShimmerAnimation):
-                self.tree_widget.takeTopLevelItem(idx)
-
     def load_data(self):
         with open(os.path.join(BASE_DIR, "data", "stations.json"), "r", encoding='utf-8') as f:
-            self.stations = sorted(json.load(f))
+            self.station_data = json.load(f)
+            # self.stations = sorted(json.load(f))
 
     def stop_process_listener(self):
         if self.process_listener is not None:
@@ -631,51 +637,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.process_listener.on_new_status_callback = self.new_status.emit
         self.process_listener.on_computation_done_callback = self.search_done.emit
 
-    def insert_connection(self, connection: DBConnection):
-        travel_time_str = "{} - {}".format(connection.start_time, connection.end_time)
-        desired_reservation = self.current_search_params.reservation_category
-        reservation_states = [train.reservation_option == desired_reservation for train in connection.trains]
-        if all(reservation_states):
-            color = QtGui.QColor("#66bb6a")
-            overall_reservation_icon = CustomSortTreeWidgetItem.reservation_ok_icon
-        elif any(reservation_states):
-            color = QtGui.QColor("#ffab91")
-            overall_reservation_icon = CustomSortTreeWidgetItem.reservation_partial_icon
-        else:
-            color = QtGui.QColor("#e57373")
-            overall_reservation_icon = CustomSortTreeWidgetItem.reservation_fail_icon
-        overall_trains = ", ".join([train.id for train in connection.trains])
-
-        if connection.num_train_changes == 0:
-            train = connection.trains[0]
-            train_changes = "0 ({} - {})".format(train.start_station, train.final_station)
-            overall_reservation_icon += " " + train.reservation_option.value
-        else:
-            train_changes = str(connection.num_train_changes)
-        data_columns = (travel_time_str, connection.travel_duration, train_changes, overall_trains,
-                        overall_reservation_icon)
-
-        item = CustomSortTreeWidgetItem(data_columns)
-
-        if connection.num_train_changes > 0:
-            for idx, train in enumerate(connection.trains):
-                travel_time_str = "{} - {}".format(train.start_time, train.end_time)
-                dur = train.travel_duration
-                travel_dur_str = "{}h {}min".format(int(dur[:dur.find(":")]), int(dur[dur.find(":") + 1:]))
-                data_columns = (
-                    travel_time_str, travel_dur_str, "{} - {}".format(train.start_station, train.final_station),
-                    train.id, train.reservation_option.value)
-                subitem = CustomSortTreeWidgetItem(data_columns)
-                subitem.sortable = False
-                item.addChild(subitem)
-        for i in range(self.tree_widget.columnCount()):
-            item.setData(i, QtCore.Qt.ItemDataRole.UserRole, color)
-        self.tree_widget.addTopLevelItem(item)
-
     def update_connection_list(self):
-        self.tree_widget.clear()
+        self.result_widget.clear()
         for connection in self.found_connections:
-            self.insert_connection(connection)
+            self.result_widget.insert_connection(connection, self.current_search_params)
 
 
 def search_reservations(search_params, result_queue, status_queue, headless=False, done_event=None):
@@ -740,7 +705,17 @@ def start_gui():
         QLineEdit,
         QComboBox
         {""" + \
-        "color: {QTMATERIAL_SECONDARYTEXTCOLOR};".format(**os.environ) + "}"
+        "color: {QTMATERIAL_SECONDARYTEXTCOLOR};".format(**os.environ) + "}" + \
+        """
+        QComboBox::item {
+            margin-top: 0px;
+            margin-bottom: 0px;
+            margin-left: -8px;
+            padding-left: -5px;
+            min-height: 5px;
+            height: 15px;
+        }
+        """
 
     stylesheet = app.styleSheet()
     app.setStyleSheet(stylesheet + s)

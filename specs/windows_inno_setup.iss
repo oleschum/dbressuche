@@ -4,7 +4,7 @@
 #define MyAppName "Deutsche Bahn Reservierungssuche"
 
 #ifndef MyAppVersion
-#define MyAppVersion "1.0"
+#define MyAppVersion "3.0.0"
 #endif
 
 #define MyAppPublisher "Ole Schumann"

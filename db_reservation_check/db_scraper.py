@@ -1,12 +1,14 @@
 import sys
-import re
 import time
 from copy import deepcopy
 from enum import Enum
+from urllib.parse import quote
+from dataclasses import dataclass, field
 import multiprocessing
 import signal
 import traceback
 import platform
+from typing import Union
 
 from selenium import webdriver
 from selenium.webdriver.firefox.service import Service as FirefoxService
@@ -17,15 +19,65 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from db_reservation_check.time_helper import compute_travel_time, TimeCheckResult, connection_in_time_interval
+from db_reservation_check.time_helper import TimeCheckResult, connection_in_time_interval, convert_duration_format
 
 
 class ReservationOption(Enum):
-    GROSSRAUM = "Großraum"
-    ABTEIL = "Abteil"
+    STANDARD = "Standard"
     FAMILIE = "Familienbereich"
     KLEINKIND = "Kleinkindabteil"
     NONE = "-"
+
+
+@dataclass
+class ReservationInformation:
+    info_available: bool = False
+    total_seats: int = 0
+    total_seats_free: int = 0
+
+    seat_info: dict = field(default_factory=lambda: {
+        ReservationOption.STANDARD: {"free": 0, "total": 0, "wagon": set()},
+        ReservationOption.KLEINKIND: {"free": 0, "total": 0, "wagon": set()},
+        ReservationOption.FAMILIE: {"free": 0, "total": 0, "wagon": set()}
+    })
+
+
+class TravelClass(Enum):
+    FIRST = 1
+    SECOND = 2
+
+
+class AgeGroups(Enum):
+    CHILD_0_5 = 8
+    CHILD_6_14 = 11
+    ADULT_27_64 = 13
+    ADULT_15_26 = 9
+    SENIOR_65 = 12
+    DOG = 14
+    BIKE = 3
+
+
+class BahnCardClass(Enum):
+    NONE = "KLASSENLOS"
+    KLASSE1 = "KLASSE_1"
+    KLASSE2 = "KLASSE_2"
+
+
+class BahnCard(Enum):
+    NONE = 16
+    BC25 = 17
+    BC50 = 23
+    BC100 = 24
+    BC25_BUSINESS = 19
+    BC50_BUSINESS = 18
+
+
+@dataclass
+class Passenger:
+    age: int = 42
+    age_group: AgeGroups = AgeGroups.ADULT_27_64
+    bahn_card: BahnCard = BahnCard.NONE
+    bahn_card_class: BahnCardClass = BahnCardClass.NONE
 
 
 class SearchParameters:
@@ -35,25 +87,75 @@ class SearchParameters:
         self.earliest_dep_time = ""  # format HH:MM
         self.latest_dep_time = ""  # format HH:MM
         self.start_station = ""
+        self.start_station_id = 0
         self.final_station = ""
-        self.num_reservations = 1
-        self.orig_num_reservations = 1  # dropdown selection, different due to non counted children below 5
+        self.final_station_id = 0
+        self.travel_class = TravelClass.SECOND
+        self.passengers = [Passenger()]  # type: list[Passenger]
         self.reservation_category = ReservationOption.KLEINKIND
         self.only_direct_connections = False
+        self.only_fast_connections = False
         self.search_started = ""  # format HH:MM:SS
+
+    def convert_to_search_url(self) -> str:
+        base_url = "https://www.bahn.de/buchung/fahrplan/suche#sts=true"
+        so = quote(self.start_station)
+        zo = quote(self.final_station)
+        soid = quote("A=1@O={}@L={}".format(self.start_station, self.start_station_id))
+        zoid = quote("A=1@O={}@L={}".format(self.final_station, self.final_station_id))
+        soei = self.start_station_id
+        zoei = self.final_station_id
+
+        direct = "true" if self.only_direct_connections else "false"
+        fast = "true" if self.only_fast_connections else "false"
+
+        travellers = self._convert_passengers_to_url_params()
+        date_time = self._convert_travel_date_to_url_params()
+
+        url = (base_url + f"&so={so}&zo={zo}" +  # name of stations (only for visu)
+               f"&kl={self.travel_class.value}" +  # travel class
+               f"&r={travellers}" +  # passengers and bahn cards
+               f"&soid={soid}&zoid={zoid}" +  # bahnhof IDs (IBNR) and names
+               "&sot=ST&zot=ST" +  # stations for start and ziel
+               f"&soei={soei}&zoei={zoei}" +  # stations IDs
+               f"&d={direct}" +  # only direct connection
+               f"&hd={date_time}" +  # travel date and time of outward journey
+               "&hza=D" +  # given time is Depature (not A for Arrival)
+               "&ar=false" +
+               f"&s={fast}" +  # if true, only fastest connections are shown
+               "&hz=%5B%5D" +
+               "&fm=false" +  # fahrradmitnahme
+               "&bp=false"  # bestprice
+               )
+
+        return url
+
+    def _convert_passengers_to_url_params(self):
+        # r= comma separated, ALTERSGRUPPE:BAHNCARD:KLASSE_BAHNCARD:ANZAHL_REISENDER:ALTER
+        url = ""
+        for passenger in self.passengers:
+            url += "{}:{}:{}:1:{},".format(passenger.age_group.value, passenger.bahn_card.value,
+                                           passenger.bahn_card_class.value, passenger.age)
+        url = url[:-1]  # remove trailing comma
+        return url
+
+    def _convert_travel_date_to_url_params(self):
+        # desired format for url is yyyy-mm-ddTHH:MM:SS
+        day, month, year = self.travel_date.split(".")  # travel date has format dd.mm.yyyy
+        return f"{year}-{month}-{day}T{self.earliest_dep_time}:00"
 
 
 class Train:
 
     def __init__(self):
-        self.start_date = ""  # format DD.mm.YY
+        # self.start_date = ""  # format DD.mm.YY
         self.start_time = ""  # format HH:MM
         self.end_time = ""  # format HH:MM
         self.travel_duration = ""  # format HH:MM
         self.start_station = ""
         self.final_station = ""
         self.id = ""  # e.g. "ICE 652"
-        self.reservation_option = ReservationOption.NONE
+        self.reservation_information = ReservationInformation()
 
 
 class DBConnection:
@@ -66,7 +168,8 @@ class DBConnection:
         self.start_station = ""
         self.final_station = ""
         self.trains = []  # type: list[Train]
-        self._start_date = ""  # format DD.mm.YY
+        self.price_information = {}  # format ticket_name: price
+        self.different_travel_date = False
 
     def __eq__(self, other: "DBConnection"):
         return self.travel_duration == other.travel_duration and self.start_time == other.start_time and \
@@ -78,9 +181,9 @@ class DBConnection:
 
     def __str__(self):
         train_id_str = ", ".join(self.train_ids)
-        return f"{self.start_date} {self.start_time} - {self.end_time} ({self.travel_duration}), " \
+        return f"{self.start_time} - {self.end_time} ({self.travel_duration}), " \
                f"{self.num_train_changes} (mit {train_id_str}), " \
-               f"Reservierungsoptionen: {[x.reservation_option.value for x in self.trains]}"
+               f"Reservierungsinfo: {[str(x.reservation_information.seat_info) for x in self.trains]}"
 
     @property
     def num_train_changes(self):
@@ -92,17 +195,6 @@ class DBConnection:
     @property
     def train_ids(self):
         return [x.id for x in self.trains]
-
-    @property
-    def start_date(self) -> str:
-        if len(self.trains) == 0:
-            return self._start_date
-        else:
-            return self.trains[0].start_date
-
-    @start_date.setter
-    def start_date(self, date: str):
-        self._start_date = date
 
 
 def get_control():
@@ -122,6 +214,13 @@ class DBReservationScraper:
         self.url = "https://www.bahn.de/"
         self.killed = False
         self.done_event = done_event
+        self.parsed_connections = []  # type: list[DBConnection]
+        self.search_params = None
+        self.status_queue = None
+        self.result_queue = None
+        self._n_conn_parsed_again = 0
+        self._all_connections_found = False
+        self.retry_counter = 0
         signal.signal(signal.SIGINT, self.exit_gracefully)
         signal.signal(signal.SIGTERM, self.exit_gracefully)
 
@@ -134,72 +233,63 @@ class DBReservationScraper:
             sys.exit(0)
         self.killed = True
 
-    def search_reservations(self, search_params: SearchParameters, result_queue: multiprocessing.Queue = None,
-                            status_queue: multiprocessing.Queue = None):
-        status_queue.put("Starte Suche...")
-
+    def _setup_ff_service(self):
         # no console window of geckodriver https://stackoverflow.com/a/71093078/3971621
         firefox_service = FirefoxService()
         if platform.system() == "Windows":
             from subprocess import CREATE_NO_WINDOW
             firefox_service.creation_flags = CREATE_NO_WINDOW
+        return firefox_service
 
+    def search_reservations(self, search_params: SearchParameters, result_queue: multiprocessing.Queue = None,
+                            status_queue: multiprocessing.Queue = None) -> list[DBConnection]:
+        status_queue.put("Starte Suche...")
+
+        firefox_service = self._setup_ff_service()
         self.browser = webdriver.Firefox(service=firefox_service, options=self.browser_options)
 
-        all_parsed_connections = []
+        self.parsed_connections = []
+        self.search_params = search_params
+        self.status_queue = status_queue
+        self.result_queue = result_queue
 
+        url = search_params.convert_to_search_url()
+        self.browser.get(url)
+        status_queue.put("Cookies...")
+        self._accept_cookies()
+
+        self._all_connections_found = False
+        self.retry_counter = 0
         try:
-            while True and not self.killed:
-                status_queue.put("Lade Bahn Website...")
-                self.browser.get(self.url)
-                status_queue.put("Cookies...")
-                self._accept_cookies()
-                status_queue.put("Trage Suchparameter ein...")
-                self._move_to_search()
-                self._fill_in_route(search_params)
-                self._fill_in_date_time(search_params)
-                self._set_travelers(search_params)
-                status_queue.put("Suche Züge...")
-                self._click_search_reservation()
-
-                # check for unique from/to fields or select most probable one from dropdown
-                self._check_unique_stations()
-
-                later_trains_clickable = True
-                parsed_connections, latest_connection_found = self._parse_current_connections(search_params)
-                while not latest_connection_found and later_trains_clickable:
-                    status_queue.put("Suche nach weiteren Zügen...")
-                    later_trains_clickable = self._include_later_trains()
-                    parsed_connections, latest_connection_found = self._parse_current_connections(search_params)
-
-                parsed_connections = [x for x in parsed_connections if x[1] not in all_parsed_connections]
-                all_parsed_connections += [x[1] for x in parsed_connections]
-
-                status_queue.put("Suche nach freien Plätzen...")
-                _, reload_needed = self._append_reservations_to_connections(deepcopy(parsed_connections), search_params,
-                                                                            result_queue)
-                if reload_needed:
-                    status_queue.put("Neuladen der Ergebnisse nach Alterseingabe")
-                    # revert adding of previously parsed connections to all_parsed_connections
-                    prev_parsed_connections = [x[1] for x in parsed_connections]
-                    all_parsed_connections = [x for x in all_parsed_connections if x not in prev_parsed_connections]
-                    # parse again
-                    WebDriverWait(self.browser, 10).until(
-                        EC.element_to_be_clickable((By.XPATH, "//div[@id='resultsOverviewContainer']/div")))
-                    status_queue.put("Suche nach weiteren Zügen...")
-                    parsed_connections, latest_connection_found = self._parse_current_connections(search_params)
-                    parsed_connections = [x for x in parsed_connections if x[1] not in all_parsed_connections]
-                    all_parsed_connections += [x[1] for x in parsed_connections]
-                    status_queue.put("Suche nach freien Plätzen...")
-                    self._append_reservations_to_connections(deepcopy(parsed_connections), search_params,
-                                                             result_queue)
-
-                if latest_connection_found or len(parsed_connections) == 0:
-                    status_queue.put("Späteste Verbindung gefunden.")
+            while not self._all_connections_found and not self.killed:
+                connections_html = self._locate_connection_list()
+                if not connections_html:
+                    self._all_connections_found = True
                     break
-                else:
-                    current_latest_connection = parsed_connections[-1][1]
-                    search_params.earliest_dep_time = current_latest_connection.start_time
+
+                self._n_conn_parsed_again = 0
+                for connection_html in connections_html:
+                    status_queue.put("Verarbeite Verbindungen...")
+                    # likely the first or second element in connections_html will cause us to click on a "weiter" button
+                    # to check reservation options and then later do browser.back() and we will start a new iteration
+                    connection = self.process_connection(connection_html)
+                    if connection:
+                        self.parsed_connections.append(connection)
+                        if result_queue:
+                            result_queue.put(connection, block=False)
+                            status_queue.put("Neue Verbindunge gefunden!")
+                        break
+
+                    if self._all_connections_found:
+                        status_queue.put("Alle Verbindungen gefunden!")
+                        break
+
+                if self._n_conn_parsed_again == len(connections_html):
+                    if not self._include_later_trains():
+                        status_queue.put("Alle Verbindungen gefunden!")
+                        self._all_connections_found = True
+                    else:
+                        status_queue.put("Suche weitere Verbindungen...")
         except Exception as e:
             if status_queue is not None:
                 status_queue.put(traceback.format_exc())
@@ -208,6 +298,22 @@ class DBReservationScraper:
             self.browser.quit()
             if self.done_event is not None:
                 self.done_event.set()
+
+        return self.parsed_connections
+
+    def process_connection(self, connection_html: WebElement) -> Union[DBConnection, bool]:
+        connection = self._create_connection_from_html(connection_html)
+        conn_in_time = connection_in_time_interval(connection, self.search_params, check_date=False)
+        if connection.different_travel_date or conn_in_time == TimeCheckResult.START_TOO_LATE:
+            self._all_connections_found = True
+            return False
+
+        if connection in self.parsed_connections:
+            self._n_conn_parsed_again += 1
+            return False
+
+        connection = self._add_price_and_reservation_info(connection, connection_html)
+        return connection
 
     def _accept_cookies(self):
         try:
@@ -222,347 +328,295 @@ class DBReservationScraper:
             # cookies already accepted or dialog not found
             pass
 
-    def _append_reservations_to_connections(self, connections: list[tuple[int, DBConnection]],
-                                            search_params: SearchParameters,
-                                            result_queue: multiprocessing.Queue) -> tuple[list[DBConnection], bool]:
-        connection_containers = "//div[@id='resultsOverviewContainer']/div"
-        output_connections = []
+    def _get_next_btn_for_connection(self, connection_html: WebElement) -> Union[WebElement, None]:
+        try:
+            next_btn = connection_html.find_element(By.CSS_SELECTOR,
+                                                    'div[class*="reiseloesung__item-right"] '
+                                                    'button[class*="reiseloesung-button-container__btn-waehlen"]')
+            return next_btn
+        except Exception as e:
+            return None
 
-        for idx, connection in connections:
-            # Since elements go stale after we follow one connection, we have to query
-            # the elements again after each reservation check.
+    def _add_price_and_reservation_info(self, connection: DBConnection, connection_html: WebElement):
+        next_button = self._get_next_btn_for_connection(connection_html)
+        if next_button:
+            next_button.click()
+            # time.sleep(2)
+            connection = self._parse_reservation_page(connection)
+            self.browser.back()  # get us back to connection overview page
+        else:
+            # no button for booking --> no reservation and price info
+            self._mark_not_bookable(connection)
+        return connection
+
+    def _parse_prices(self, price_cards: list[WebElement], connection: DBConnection) -> bool:
+        select_offer_button = None
+        for card in price_cards:
             try:
-                containers = WebDriverWait(self.browser, 10).until(
-                    EC.visibility_of_all_elements_located((By.XPATH, connection_containers)))
-            except:
-                return [], False
-            connection_element = containers[idx]
-            trains, reload_needed = self._check_reservation(connection_element, search_params)
-            if reload_needed:
-                return [], True
-            if len(trains) != 0:
-                connection.trains = trains
-                output_connections.append(connection)
-                if result_queue is not None:
-                    result_queue.put(connection, block=False)
-        return output_connections, False
+                price = card.find_element(By.CSS_SELECTOR, "span[class*=angebot-zusammenfassung__preis").text
+                offer_name = card.find_element(By.CSS_SELECTOR, "h3[class*=name").text
+                connection.price_information[offer_name] = price
+            except Exception as e:
+                pass
+            if not select_offer_button:
+                try:
+                    select_offer_button = card.find_element(By.CSS_SELECTOR, "button[class*=__btn")
+                except:
+                    pass
+        if select_offer_button:
+            select_offer_button.click()
+            return True
+        return False
 
-    def _check_for_age_input(self, search_params: SearchParameters):
+    def _select_seat_reservation_checkbox(self) -> Union[WebElement, None]:
         try:
-            elements = self.browser.find_elements(By.CSS_SELECTOR,
-                                                  "div[class='travellerRow'] div[class^='travellerAgeDiv'] input[id^='travellerAge']")
-            if len(elements) == 0:
-                return False
+            reservation_div = self.browser.find_element(By.CSS_SELECTOR, "div[id*=reservierung")
+            reservation_cb = reservation_div.find_element(By.CSS_SELECTOR, "input")
+            reservation_cb.click()
+            return reservation_div
         except:
-            return False  # no age field needed
+            return None
 
+    def _parse_train_reservation(self, connection: DBConnection, train: WebElement, train_idx: int):
         try:
-            for idx, el in enumerate(elements):  # type: WebElement
-                el.click()
-                if idx == 1 and (search_params.reservation_category == ReservationOption.KLEINKIND or
-                                 search_params.reservation_category == ReservationOption.FAMILIE):
-                    el.send_keys("3")
-                else:
-                    el.send_keys("42")
+            # wait until iframe is invisible. Needed if previous iFrame is not yet closed
+            WebDriverWait(self.browser, 10).until(EC.invisibility_of_element_located((By.CSS_SELECTOR,
+                                                                                      "iframe[class*=db-web")))
 
-            refresh_btn = self.browser.find_element(By.CSS_SELECTOR, "input[class^='submit-btn']")
-            refresh_btn.click()
-        except:
+            select_seats_button = WebDriverWait(train, 1).until(EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button")))
+            select_seats_button.click()
+        except Exception as e:
             return False
+
+        try:
+            frame = self.browser.find_element(By.CSS_SELECTOR, "iframe[class*=db-web")
+            self.browser.switch_to.frame(frame)
+            wagon_list = WebDriverWait(self.browser, 10).until(EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, "div[class*=Wagenliste")))
+            all_wagons = wagon_list.find_elements(By.CSS_SELECTOR, "div[class*=Wagenteil")
+        except Exception as e:
+            # we may have opened an iframe --> make sure to close it
+            try:
+                self.browser.switch_to.default_content()
+                close_btn = self.browser.find_element(By.CSS_SELECTOR,
+                                                      "button[class*=db-web-plugin-dialog__close-button")
+                close_btn.click()
+            except:
+                pass
+            return False
+
+        reservation_info = ReservationInformation()
+        reservation_info.info_available = True
+        for wagon in all_wagons:
+            try:
+                wagon_nr = wagon.get_attribute("data-wagen-nr")
+            except:
+                continue
+
+            # this is much faster than calling get_attribute for each seat
+            # https://stackoverflow.com/questions/43047606/python-selenium-get-attribute-of-elements-in-the-list-effectively
+            seat_labels = self.browser.execute_script(f"""
+                var result = []; 
+                var div = document.querySelector('div[data-wagen-nr="{wagon_nr}"]');
+                if (div) {{
+                    var buttons = div.querySelectorAll('button[class*="PlatzElement"]');
+                    for (var i = 0; i < buttons.length; i++) {{
+                        result.push(buttons[i].getAttribute('aria-label'));
+                    }}
+                }}
+                return result;
+            """)
+
+            for label in seat_labels:
+                reservation_info.total_seats += 1
+
+                if " Kindern" in label or "travellers with children" in label:
+                    sub_field = ReservationOption.FAMILIE
+                elif "Kleinkindern" in label or "travellers with young children" in label:
+                    sub_field = ReservationOption.KLEINKIND
+                else:
+                    sub_field = ReservationOption.STANDARD
+                reservation_info.seat_info[sub_field]["total"] += 1
+                if "verfügbar." in label or "available" in label:
+                    reservation_info.total_seats_free += 1
+                    reservation_info.seat_info[sub_field]["free"] += 1
+                    reservation_info.seat_info[sub_field]["wagon"].add(wagon_nr)
+        connection.trains[train_idx].reservation_information = reservation_info
+        self.browser.switch_to.default_content()
+        close_btn = self.browser.find_element(By.CSS_SELECTOR, "button[class*=db-web-plugin-dialog__close-button")
+        close_btn.click()
         return True
 
-    def _check_unique_stations(self):
-
-        # Idea: wait until top progressbar is loaded
-        #  -> Then check at which stage we are. If we are still in "search" stage, check for error message
-        #  -> finally resubmit search
-
-        x_path_progressbar = '//ul[@id="hfs_progressbar"]'
+    def _parse_reservation_page(self, connection: DBConnection) -> DBConnection:
         try:
-            progressbar = WebDriverWait(self.browser, 10).until(
-                EC.visibility_of_element_located((By.XPATH, x_path_progressbar)))  # type: WebElement
-
-            active_element = progressbar.find_element(By.CSS_SELECTOR, "li[class*='active']")  # type: WebElement
-            if "Suche" in active_element.text:
-                # we are still in the search process -> click search button again
-                search_btn = self.browser.find_element(By.CSS_SELECTOR, "input[id='searchConnectionButton']")
-                search_btn.click()
-        except Exception as e:
-            return
-
-    def _check_reservation(self, connection_block: WebElement,
-                           search_params: SearchParameters) -> tuple[list[Train], bool]:
-        """
-        Perform the reservation check for a single connection.
-         - click on the reservation button
-         - check if age is needed for reservation --> return and reload page
-         - input names
-         - input reservation wish
-         - parse response and create Train objects for this connection
-        :param connection_block: html WebElement for one single connection
-        :param search_params: Search parameters, needed to insert reservation wish.
-        :return: - a list of trains with reservations added to them
-                 - a bool indicating whether a reload of the connection page is needed (e.g. due to age fields)
-        """
-
-        try:
-            # check for no fares (reservation not possible)
-            nofares = connection_block.find_element(By.CSS_SELECTOR,
-                                                    "div[class='connectionAction']  a[class='layer_nofares']")
-            return [], False
+            price_cards = WebDriverWait(self.browser, 10).until(EC.visibility_of_all_elements_located(
+                (By.CSS_SELECTOR, "div[class*=angebot-container__card")))
         except:
-            pass  # nothing to worry, we don't want to find this element usually
+            return connection
 
-        try:
-            button = connection_block.find_element(By.CSS_SELECTOR,
-                                                   "div[class='connectionAction']  a[class='buttonbold']")
+        success = self._parse_prices(price_cards, connection)
+        if not success:
+            return connection
 
-            button.click()
-        except:
-            return [], False
+        reservation_div = self._select_seat_reservation_checkbox()
+        if not reservation_div:
+            return connection
 
-        refresh_needed = self._check_for_age_input(search_params)
-        if refresh_needed:
-            return [], True
+        trains = reservation_div.find_elements(By.CSS_SELECTOR, 'div[class="platzreservierungAbschnitt _abschnitt"')
 
-        # we are now on the "ticket & reservierung page" and are possibly asked for login details
-        # enter data and continue as guest
-
-        wait = WebDriverWait(self.browser, 10)
-        first_name_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "input[id^='vorname']")))
-
-        first_name_input.send_keys(get_control() + "a")
-        first_name_input.send_keys(Keys.DELETE)
-        first_name_input.send_keys("Bahnchef")
-
-        last_name_input = self.browser.find_element(By.CSS_SELECTOR, "input[id^='nachname']")
-        last_name_input.send_keys(get_control() + "a")
-        last_name_input.send_keys(Keys.DELETE)
-        last_name_input.send_keys("Lutz")
-
-        guest_button = self.browser.find_element(By.CSS_SELECTOR,
-                                                 "div[class='button-abschnitt'] input[id^='button.weiter.anonym']")
-        guest_button.click()
-
-        # we are now at the page where we can select the seat category
-        reservation_wish_to_label = {
-            ReservationOption.GROSSRAUM: "label[for='abteilart-standard-1']",
-            ReservationOption.ABTEIL: "label[for='abteilart-standard-3']",
-            ReservationOption.KLEINKIND: "label[for='abteilart-kleinkind-4']",
-            ReservationOption.FAMILIE: "label[for='abteilart-kleinkind-5']",
-            ReservationOption.NONE: "label[for='abteilart-standard-0']"
-        }
-        try:
-            radio_btn = self.browser.find_element(By.CSS_SELECTOR,
-                                                  reservation_wish_to_label[search_params.reservation_category])
-            radio_btn.click()
-        except:
-            return [], False
-
-        # click continue button
-        button = self.browser.find_element(By.CSS_SELECTOR, "input[id='buchenwunsch-button-weiter-id']")
-        button.click()
-
-        # we are now on the page where it is shown if our wish can be fulfilled
-
-        # get the individual sections: one section for each train
-        sections = self.browser.find_elements(By.CSS_SELECTOR,
-                                              "section[class^='reservierungs-details']")  # type: list[WebElement]
-        # parse date from heading
-        heading_text = self.browser.find_element(By.CSS_SELECTOR, "div[class*='container'] h3").text
-        # assume that date is in format DD.MM.YYYY and is last part of heading
-        travel_date = heading_text[-10:]
-        trains = []
-        for sec in sections:
-            train = self._create_train_from_reservation_html(sec)
-            train.start_date = travel_date
-            trains.append(train)
-
-        # go back
-        self.browser.find_element(By.CSS_SELECTOR, "a[id='header.bahnbuchen.step2.button']").click()
-        return trains, False
-
-    def _click_search_reservation(self):
-        search_xpath = '//*[@id="reservationButton"]'
-        self.browser.find_element(By.XPATH, search_xpath).click()
-
-    def _create_connection_from_html(self, connection_block: WebElement) -> DBConnection:
-        start_time = connection_block.find_elements(By.CSS_SELECTOR,
-                                                    "div[class='connectionTimeSoll']  span[class='timeDep']")[0].text
-        end_time = connection_block.find_elements(By.CSS_SELECTOR,
-                                                  "div[class='connectionTimeSoll']  span[class='timeArr']")[0].text
-
-        duration = connection_block.find_elements(By.CSS_SELECTOR,
-                                                  "div[class='connectionTimeSoll']  div[class='duration']")[0].text
-        if duration.startswith("|"):
-            duration = duration[1:]
-
-        try:
-            start_station = connection_block.find_elements(By.CSS_SELECTOR,
-                                                           "div[class=connectionRoute] div[class*='first']")[0].text
-        except:
-            start_station = ""
-        try:
-            final_station = connection_block.find_elements(By.CSS_SELECTOR,
-                                                           "div[class=connectionRoute] div[class*='Dest']")[0].text
-        except:
-            final_station = ""
-
-        connection = DBConnection()
-        connection.start_time = start_time
-        connection.end_time = end_time
-        connection.travel_duration = duration
-        connection.start_station = start_station
-        connection.final_station = final_station
+        for idx, train in enumerate(trains):
+            self._parse_train_reservation(connection, train, idx)
 
         return connection
 
-    def _create_train_from_reservation_html(self, section: WebElement) -> Train:
-        train = Train()
-        train.id = section.find_element(By.CSS_SELECTOR, "div[class='fs-sidebar c-number']").text
-
-        # parse connection
-        start_text = section.find_element(By.CSS_SELECTOR, "div[class='verbindung-start']  span[class='label']").text
-        colon_idx = start_text.find(":")
-        train.start_time = start_text[colon_idx - 2:colon_idx + 3]
-        train.start_station = start_text[colon_idx + 3:].strip()
-
-        end_text = section.find_element(By.CSS_SELECTOR, "div[class='verbindung-end']  span[class='label']").text
-        colon_idx = end_text.find(":")
-        train.end_time = end_text[colon_idx - 2:colon_idx + 3]
-        train.final_station = end_text[colon_idx + 3:].strip()
-
-        def parse_reservation_table(text: str):
-            if ": Abteil" in text:
-                train.reservation_option = ReservationOption.ABTEIL
-            elif "Familie" in text:
-                train.reservation_option = ReservationOption.FAMILIE
-            elif "Großraum" in text or "Grossraum" in text:
-                train.reservation_option = ReservationOption.GROSSRAUM
-            elif "Kleinkind" in text:
-                train.reservation_option = ReservationOption.KLEINKIND
-            else:
-                train.reservation_option = ReservationOption.NONE
-
-        # parse reservation option
+    def _locate_connection_list(self) -> Union[list[WebElement], bool]:
         try:
-            wish_fulfilled = section.find_element(By.CSS_SELECTOR, "table[title='Wünsche erfüllbar']").text
-            parse_reservation_table(wish_fulfilled)
-        except:
-            try:
-                # check if alternative places are used
-                alternative = section.find_element(By.CSS_SELECTOR, "table[title='alternative Plätze']").text
-                parse_reservation_table(alternative)
-            except:
-                train.reservation_option = ReservationOption.NONE
-        travel_duration = compute_travel_time(train.start_time, train.end_time)
-        train.travel_duration = "{:0>2}:{:0>2}".format(travel_duration[0], travel_duration[1])
-        return train
-
-    def _fill_in_route(self, search_params: SearchParameters):
-        start_xpath = '//*[@id="locS0"]'
-        end_xpath = '//*[@id="locZ0"]'
-
-        start_input_box = self.browser.find_element(By.XPATH, start_xpath)
-        start_input_box.click()
-        start_input_box.send_keys(search_params.start_station)
-
-        end_input_box = self.browser.find_element(By.XPATH, end_xpath)
-        end_input_box.click()
-        end_input_box.send_keys(search_params.final_station)
-
-    def _fill_in_date_time(self, search_params: SearchParameters):
-        date_path = '//*[@id="REQ0JourneyDate"]'
-        time_path = '//*[@id="REQ0JourneyTime"]'
-
-        def set(path, val):
-            elem = self.browser.find_element(By.XPATH, path)
-            elem.click()
-            elem.send_keys(get_control() + "a")
-            elem.send_keys(Keys.DELETE)
-            elem.send_keys(val)
-
-        set(date_path, search_params.travel_date)
-        set(time_path, search_params.earliest_dep_time)
-
-    def _get_date_from_datedivider(self, element: WebElement) -> str:
-        pattern = re.compile(r"\d{2}\.\d{2}\.\d{2}", re.IGNORECASE)  # search for date in format DD.mm.YY
-        res = pattern.search(element.text)
-        if res:
-            # convert DD.mm.YY format into DD.mm.YYYY format
-            date_str = res.group()
-            return date_str[:-2] + "20" + date_str[-2:]
-        else:
-            return ""
-
-    def _include_later_trains(self):
-        try:
-            later_btn = self.browser.find_element(By.CSS_SELECTOR, "div[class='timeButton']  a[class='later']")
-            later_btn.click()
-            return True
-        except:
+            connection_div = WebDriverWait(self.browser, 10).until(
+                EC.visibility_of_element_located(
+                    (By.CSS_SELECTOR, 'div[class*="reiseloesung-list-page__wrapper"')))
+            connections_html = connection_div.find_elements(By.CSS_SELECTOR,
+                                                            'li[class^=verbindung-list__result-item')
+            return connections_html
+        except:  # early exit, no connections found
             return False
 
-    def _move_to_search(self):
-        path = '//*[@id="qf-search-city"]'
-        search_btn = self.browser.find_element(By.XPATH, path)
-        search_btn.click()
+    def _mark_not_bookable(self, connection: DBConnection):
+        connection.price_information = {}
+        for train in connection.trains:
+            train.reservation_information = ReservationInformation()
+            train.reservation_information.info_available = False  #
 
-    def _parse_current_connections(self, search_params: SearchParameters) -> \
-            tuple[list[tuple[int, DBConnection]], bool]:
-        connection_containers = "//div[@id='resultsOverviewContainer']/div"
+    def _create_connection_from_html(self, connection_html: WebElement) -> DBConnection:
+        start_time = connection_html.find_element(By.CSS_SELECTOR,
+                                                  "div[class*='reiseplan__uebersicht-uhrzeit-von'] time").text
+
+        end_time = connection_html.find_element(By.CSS_SELECTOR,
+                                                "div[class*='reiseplan__uebersicht-uhrzeit-nach'] time").text
+
+        duration = connection_html.find_element(By.CSS_SELECTOR,
+                                                "span[class='dauer-umstieg__dauer']").text
+        start_station = connection_html.find_element(By.CSS_SELECTOR,
+                                                     "span[class='test-reise-beschreibung-start-value']").text
+        final_station = connection_html.find_element(By.CSS_SELECTOR,
+                                                     "span[class='test-reise-beschreibung-ziel-value']").text
+
+        connection = DBConnection()
+        try:
+            date_shift_heading = connection_html.find_element(By.CSS_SELECTOR,
+                                                              "div[class='reiseloesung-heading']")
+            connection.different_travel_date = True
+        except:
+            # date_shift_heading is only found for dateshifts. If we have not found it, everything is ok
+            connection.different_travel_date = False
+
+        connection.start_time = start_time
+        connection.end_time = end_time
+        connection.travel_duration = convert_duration_format(duration)
+        connection.start_station = start_station
+        connection.final_station = final_station
+
+        self._add_trains(connection, connection_html)
+
+        return connection
+
+    def _add_trains(self, connection: DBConnection, connection_html: WebElement):
 
         try:
-            containers = WebDriverWait(self.browser, 10).until(
-                EC.visibility_of_all_elements_located((By.XPATH, connection_containers)))
-        except:
-            return [], False
+            details_btn = connection_html.find_element(By.CSS_SELECTOR,
+                                                       "div[class*='reiseplan__details'] button")
+            span_open_close = details_btn.find_element(By.CSS_SELECTOR,
+                                                       "span[class='util__offscreen']").text
+            if span_open_close != "schließe":
+                details_btn.click()
 
-        latest_connection_found = False
-        relevant_connections = []
-        current_date = search_params.travel_date
-        for idx, element in enumerate(containers):
-            if "dateDivider" in element.get_attribute("class"):
-                new_date = self._get_date_from_datedivider(element)
-                if new_date != "":
-                    current_date = new_date
-            if "overview_update" in element.get_attribute("id"):
-                connection = self._create_connection_from_html(element)
-                connection.start_date = current_date
-                in_time = connection_in_time_interval(connection, search_params)
-                if in_time == TimeCheckResult.OK:
-                    relevant_connections.append((idx, connection))
-                if in_time == TimeCheckResult.START_TOO_LATE or in_time == TimeCheckResult.DATE_TOO_LATE:
-                    # we can assume that the data we get from the homepage is sorted by departure time
-                    latest_connection_found = True
-                    break
+            train_list_html = connection_html.find_elements(By.CSS_SELECTOR,
+                                                            "div[class='verbindungs-abschnitt']")
+        except Exception as e:
+            return
 
-        return relevant_connections, latest_connection_found
+        for train_html in train_list_html:
+            train = Train()
 
-    def _set_travelers(self, search_params: SearchParameters):
-        num_travelers_xpath = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[3]/div/div[2]/select/option[{}]".format(
-            search_params.num_reservations)
+            try:
+                depature_time = train_html.find_element(By.CSS_SELECTOR,
+                                                        "time[class*='verbindungs-halt__zeit-abfahrt']").text
+                css_start_station = 'verbindungs-halt-bahnhofsinfos__name--abfahrt'
+                start_station = train_html.find_element(By.CSS_SELECTOR,
+                                                        f"span[class*={css_start_station}], a[class*={css_start_station}]").text
 
-        self.browser.find_element(By.XPATH, num_travelers_xpath).click()
+                # verbindungs-halt-bahnhofsinfos__name--ankunft
 
-        if search_params.reservation_category == ReservationOption.KLEINKIND or \
-                search_params.reservation_category == ReservationOption.FAMILIE:
-            age_second_traveler_path = "/html/body/div/div[3]/form/div[1]/div[1]/fieldset[3]/div/div[4]/div[3]/div/div[2]/div/select/option[1]"
-            self.browser.find_element(By.XPATH, age_second_traveler_path).click()
+                duration = train_html.find_element(By.CSS_SELECTOR,
+                                                   "span[class*='verbindungs-transfer__dauer--desktop']").text
+
+                train_id = train_html.find_element(By.CSS_SELECTOR,
+                                                   "span[class='test-zugnummer-label__text']").text
+
+                end_time = train_html.find_element(By.CSS_SELECTOR,
+                                                   "time[class*='verbindungs-halt__zeit-ankunft']").text
+
+                css_final_station = 'verbindungs-halt-bahnhofsinfos__name--ankunft'
+                final_station = train_html.find_element(By.CSS_SELECTOR,
+                                                        f"span[class*={css_final_station}], a[class*={css_final_station}]").text
+
+                train.start_station = start_station
+                train.start_time = depature_time
+                train.travel_duration = convert_duration_format(duration)
+                train.id = train_id
+                train.end_time = end_time
+                train.final_station = final_station
+            except Exception as e:
+                continue
+
+            connection.trains.append(train)
+
+    def _include_later_trains(self):
+
+        search_params = deepcopy(self.search_params)
+        start_time = self.parsed_connections[-1].start_time
+        # last_digit = int(start_time[-1]) + 1
+        # start_time = start_time[:-1] + str(last_digit)
+        search_params.earliest_dep_time = start_time
+        new_url = search_params.convert_to_search_url()
+        if new_url == self.browser.current_url:
+            self.retry_counter += 1
+        else:
+            self.retry_counter = 0
+        self.browser.get(new_url)
+        time.sleep(2)
+
+        if self.retry_counter > 3:
+            return False
+        return True
 
 
 def main():
     search_params = SearchParameters()
-    search_params.start_station = "Hannover Hbf"
-    search_params.final_station = "Stuttgart Hbf"
-    search_params.earliest_dep_time = "10:00"
-    search_params.latest_dep_time = "21:47"
-    search_params.travel_date = "01.01.2023"
+    search_params.start_station = "Celle"
+    search_params.start_station_id = 8000064  # 8596001=BASEL
+    search_params.final_station_id = 8000152
+    search_params.final_station = "Hannover Hbf"  # soei=8000152&zoei=
+    search_params.earliest_dep_time = "08:49"
+    search_params.latest_dep_time = "10:59"
+    search_params.travel_date = "14.12.2023"
     search_params.reservation_category = ReservationOption.KLEINKIND
-    search_params.num_reservations = 2
 
-    scraper = DBReservationScraper(False)
-    scraper.search_reservations(search_params)
+    p1 = Passenger(age=29, age_group=AgeGroups.ADULT_27_64, bahn_card=BahnCard.BC25,
+                   bahn_card_class=BahnCardClass.KLASSE2)
+    p2 = Passenger(age=3, age_group=AgeGroups.CHILD_0_5)
+    search_params.passengers = [p1, p2]
+
+    scraper = DBReservationScraper(headless=False)
+    status_queue = multiprocessing.Queue()
+    results = scraper.search_reservations(search_params, status_queue=status_queue)
+    for con in results:
+        print("-" * 80)
+        print(con.start_station, con.final_station, con.start_time, con.end_time)
+        for train in con.trains:
+            print("Train:", train.start_station, train.end_time, train.start_time, train.end_time,
+                  train.reservation_information.info_available, train.reservation_information.seat_info)
+            print("/" * 20)
 
 
 if __name__ == '__main__':

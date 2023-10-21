@@ -9,6 +9,7 @@ class AutocompleteLineEdit(QtWidgets.QLineEdit):
         completer = QtWidgets.QCompleter(completion_entries)
         completer.setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
         completer.setCompletionMode(QtWidgets.QCompleter.CompletionMode.PopupCompletion)
+        # completer.setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
         self.setCompleter(completer)
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:

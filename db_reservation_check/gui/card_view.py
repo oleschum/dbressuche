@@ -27,8 +27,19 @@ class CardView(QtWidgets.QWidget):
         self.text_label2 = QtWidgets.QLabel("Extra Information 2", self)
         self.text_label2.setStyleSheet("font-size: 10px;")
 
+        self.close_btn = QtWidgets.QPushButton("x")
+        self.close_btn.setStyleSheet("font-size: 12px;")
+        self.close_btn.setFixedWidth(24)
+        self.close_btn.setFixedHeight(24)
+
         self.layout = QtWidgets.QVBoxLayout(self)
-        self.layout.addWidget(self.headline_label)
+
+        hlayout = QtWidgets.QHBoxLayout()
+        hlayout.addWidget(self.headline_label)
+        hlayout.addWidget(self.close_btn)
+
+
+        self.layout.addLayout(hlayout)
         self.layout.addWidget(self.text_label1)
         self.layout.addWidget(self.text_label2)
         self.layout.addStretch()
