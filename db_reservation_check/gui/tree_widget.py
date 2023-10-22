@@ -134,7 +134,6 @@ class ResultWidget(QtWidgets.QTreeWidget):
         for i in range(self.columnCount()):
             self.setColumnWidth(i, column_widths[i])
         self.setSortingEnabled(True)
-        #self.setDragDropMode(QtWidgets.QTreeWidget.DragDropMode.InternalMove)
         header = self.header()
         header.setSectionsMovable(True)
 
@@ -170,7 +169,7 @@ class ResultWidget(QtWidgets.QTreeWidget):
             color = QtGui.QColor("#dffae0")
             overall_reservation_icon = CustomSortTreeWidgetItem.reservation_ok_icon
             tooltip_reservation_main = "Reservierungswunsch erfüllbar"
-            status_label_reservation = StatusLabel("Wunsch erfüllbar")
+            status_label_reservation = StatusLabel(desired_reservation.value)
             status_label_reservation.background_color = QtGui.QColor("#47a64b")
             status_label_reservation.border_color = QtGui.QColor("#55aa6a")
         elif any(reservation_states):
@@ -194,7 +193,8 @@ class ResultWidget(QtWidgets.QTreeWidget):
             train_changes = "0 ({} - {})".format(train.start_station, train.final_station)
             overall_reservation_icon += " " + self._get_reservation_text(train.reservation_information, search_params)
             tooltip_reservation_main = self._get_reservation_tooltip(train.reservation_information)
-            status_label_reservation.setText(self._get_reservation_text(train.reservation_information, search_params))
+            status_label_reservation.setText(self._get_reservation_text(train.reservation_information, search_params,
+                                                                        simple_format=True))
         else:
             train_changes = str(connection.num_train_changes)
 
@@ -230,7 +230,7 @@ class ResultWidget(QtWidgets.QTreeWidget):
         self.addTopLevelItem(item)
 
     def _get_reservation_text(self, reservation_information: ReservationInformation,
-                              search_params) -> str:
+                              search_params, simple_format=False) -> str:
         if not reservation_information.info_available:
             return "Reservierung nicht möglich"
         seat_info = reservation_information.seat_info
@@ -247,6 +247,8 @@ class ResultWidget(QtWidgets.QTreeWidget):
         alternatives = all_alternatives[desired_reservation]
         for alternative in alternatives:
             if seat_info[alternative]["free"] >= num_travellers:
+                if simple_format:
+                    return alternative.value
                 return "{} ({} von {} frei)".format(alternative.value, seat_info[alternative]["free"],
                                                     seat_info[alternative]["total"])
 

@@ -17,13 +17,27 @@ class UrlDialog(QtWidgets.QDialog):
         image_label.setPixmap(pixmap)
         image_label.setFixedSize(300, 300)
 
+        open_button = QtWidgets.QPushButton("Öffnen")
+        open_button.clicked.connect(self.open_browser)
+
         layout = QtWidgets.QHBoxLayout()
         layout.addWidget(image_label)
-        layout.addWidget(self.url_label)
+        vlayout = QtWidgets.QVBoxLayout()
+        vlayout.addWidget(self.url_label)
+        vlayout.addWidget(open_button)
+        layout.addLayout(vlayout)
 
         self.setLayout(layout)
-        self.setWindowTitle("Such-Url")
+        self.setWindowTitle("Bahn Suche Url")
 
+        self.url = ""
+
+    def set_url(self, url):
+        self.url = url
+        self.url_label.setText(url)
+
+    def open_browser(self):
+        QtGui.QDesktopServices.openUrl(self.url)
 
 
 # dialog = QtWidgets.QDialog()

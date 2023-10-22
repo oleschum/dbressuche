@@ -554,8 +554,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
     def show_url_dialog(self):
         dialog = UrlDialog()
         search_params = self.create_search_params()
-        url = search_params.convert_to_search_url()
-        dialog.url_label.setText(url)
+        dialog.set_url(search_params.convert_to_search_url())
         dialog.exec()
 
     def show_about_dialog(self):

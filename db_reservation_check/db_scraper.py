@@ -23,7 +23,7 @@ from db_reservation_check.time_helper import TimeCheckResult, connection_in_time
 
 
 class ReservationOption(Enum):
-    STANDARD = "Standard"
+    STANDARD = "Standardbereich"
     FAMILIE = "Familienbereich"
     KLEINKIND = "Kleinkindabteil"
     NONE = "-"
