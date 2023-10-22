@@ -449,58 +449,6 @@ class DBScraperGui(QtWidgets.QMainWindow):
             self.status_queue.get_nowait()
 
     def on_search_clicked(self):
-
-        from db_reservation_check.db_scraper import Train, ReservationInformation, ReservationOption
-        connection = DBConnection()
-        connection.travel_duration = "02:23"
-        connection.start_time = "08:23"
-        connection.end_time = "19:23"
-        connection.start_station = "Hannover"
-        connection.final_station = "ASD"
-
-        pce = random.randint(20, 200)
-        connection.price_information={"Flexpreis": "159,95€", "Sparpreis": f"{pce},23€", "Super Sparpreis": "48,12€"}
-        train = Train()
-        train.travel_duration = "01:00"
-        train.start_station = "asd1"
-        train.final_station = "asd2"
-        train.end_time = "12:00"
-        train.start_time = "11:00"
-        train.reservation_information = ReservationInformation()
-        train.reservation_information.info_available = True
-        train.reservation_information.total_seats = 213
-        train.reservation_information.total_seats_free = 123
-        train.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 220, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
-        train.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
-        train.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 10, "total": 25,
-                                                                                "wagon": set(["9"])}
-
-        train2 = Train()
-        train2.travel_duration = "11:00"
-        train2.start_station = "asd3"
-        train2.final_station = "asd4"
-        train2.end_time = "14:00"
-        train2.start_time = "15:00"
-        train2.reservation_information = ReservationInformation()
-        train2.reservation_information.info_available = True
-        train2.reservation_information.total_seats = 213
-        train2.reservation_information.total_seats_free = 123
-        train2.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 220, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
-        train2.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
-        train2.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 0, "total": 25,
-                                                                              "wagon": set(["9"])}
-
-        connection.trains = [train, train2]
-
-        self.current_search_params = self.create_search_params()
-        self.result_widget.insert_connection(connection, self.current_search_params)
-
-        connection2 = connection
-        connection2.trains = connection2.trains[1:]
-        self.result_widget.insert_connection(connection2, self.current_search_params)
-
-        return
-
         if self.search_is_running:
             self.on_search_done()
             self.reset_status_icon()
