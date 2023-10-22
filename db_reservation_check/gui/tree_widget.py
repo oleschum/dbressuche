@@ -134,11 +134,9 @@ class ResultWidget(QtWidgets.QTreeWidget):
         for i in range(self.columnCount()):
             self.setColumnWidth(i, column_widths[i])
         self.setSortingEnabled(True)
-        self.setDragEnabled(True)
-        self.setDragDropMode(QtWidgets.QTreeWidget.DragDropMode.InternalMove)
+        #self.setDragDropMode(QtWidgets.QTreeWidget.DragDropMode.InternalMove)
         header = self.header()
         header.setSectionsMovable(True)
-        header.setDragEnabled(True)
 
         header.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
         header.customContextMenuRequested.connect(self.show_header_context_menu)

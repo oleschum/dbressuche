@@ -11,6 +11,7 @@ import qt_material
 import db_reservation_check
 from db_reservation_check.db_scraper import ReservationOption, DBReservationScraper, DBConnection, SearchParameters, \
     TravelClass
+from db_reservation_check.gui.url_dialog import UrlDialog
 from db_reservation_check.gui.toggle_button import AnimatedToggle
 from db_reservation_check.gui.autocomplete_lineedit import AutocompleteLineEdit
 from db_reservation_check.gui.color_calendar import ColorCalendarWidget
@@ -242,8 +243,11 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         # Add menus to the menu bar
         file_menu = QtWidgets.QMenu("Datei")
+        self.show_url_action = QtGui.QAction("Such-URL zeigen", self)
+        self.show_url_action.triggered.connect(self.show_url_dialog)
         self.exit_action = QtGui.QAction("Beenden", self)
         self.exit_action.triggered.connect(lambda: sys.exit(0))
+        file_menu.addAction(self.show_url_action)
         file_menu.addAction(self.exit_action)
 
         view_menu = QtWidgets.QMenu("Ansicht")
@@ -546,6 +550,13 @@ class DBScraperGui(QtWidgets.QMainWindow):
     def reset_status_icon(self):
         self.search_status_icon.setSuccess()
         self.current_error = ""
+
+    def show_url_dialog(self):
+        dialog = UrlDialog()
+        search_params = self.create_search_params()
+        url = search_params.convert_to_search_url()
+        dialog.url_label.setText(url)
+        dialog.exec()
 
     def show_about_dialog(self):
         dialog = QtWidgets.QDialog()
