@@ -8,10 +8,20 @@ from db_reservation_check.db_scraper import DBConnection, ReservationOption, Res
 class ColoredBackgroundDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint(self, painter, option, index):
-        color = index.data(QtCore.Qt.ItemDataRole.UserRole)
-        if color is not None:
-            full_rect = option.rect  # type: QtCore.QRect
-            full_rect.setHeight(full_rect.height() - 10)
+
+        if index.row() % 2 == 0:
+            color = QtGui.QColor("#fafafa")
+        else:
+            color = QtGui.QColor("#ffffff")
+
+        full_rect = option.rect  # type: QtCore.QRect
+        full_rect.setHeight(full_rect.height() - 2)
+        painter.fillRect(full_rect, color)
+
+        if QtWidgets.QStyle.StateFlag.State_Selected in option.state:
+            color = index.data(QtCore.Qt.ItemDataRole.UserRole)
+            if color is None:
+                color = QtGui.QColor("#e6e4e3")
             painter.fillRect(full_rect, color)
         super(ColoredBackgroundDelegate, self).paint(painter, option, index)
 
@@ -71,16 +81,19 @@ class CustomSortTreeWidgetItem(QtWidgets.QTreeWidgetItem):
             return 3
 
 
-class StatusLabel(QtWidgets.QLabel):
+class StatusLabel(QtWidgets.QPushButton):
     def __init__(self, text):
         super().__init__(text)
-        # self.setFixedSize(200, 60)  # Set desired size for the label
+        # self.setFixedSize(200, 10)  # Set desired size for the label
         # self.setFont(QFont("Arial", 12, QFont.Bold))  # Set custom font
+        self.setMaximumWidth(250)
 
         self.background_color = QtGui.QColor(156, 34, 0)
-        self.outline_color = QtGui.QColor(87, 19, 0)  # Custom outline color (red)
+        self.border_color = QtGui.QColor(87, 19, 0)  # Custom outline color (red)
         self.font_color = QtGui.QColor(255, 255, 255)  # Custom font color (black)
         self.bordersize = 2
+        #self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("QPushButton {font-family: Martel; font-size:13px; font-weight:normal}")
 
     def paintEvent(self, event):
         # Create the painter
@@ -89,7 +102,7 @@ class StatusLabel(QtWidgets.QLabel):
         # Create the path
         path = QtGui.QPainterPath()
         # Set painter colors to given values.
-        pen = QtGui.QPen(self.outline_color, self.bordersize)
+        pen = QtGui.QPen(self.border_color, self.bordersize)
         painter.setPen(pen)
         brush = QtGui.QBrush(self.background_color)
         painter.setBrush(brush)
@@ -115,6 +128,7 @@ class ResultWidget(QtWidgets.QTreeWidget):
         super(ResultWidget, self).__init__(*args, **kwargs)
         self.setHeaderLabels(("Reisezeit", "Dauer", "Umstiege", "Züge", "Preis", "Reservierung"))
         self.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setItemDelegate(ColoredBackgroundDelegate(self))
         column_widths = [150, 100, 200, 150, 150, 200]
         for i in range(self.columnCount()):
@@ -155,17 +169,26 @@ class ResultWidget(QtWidgets.QTreeWidget):
         reservation_states = [train.reservation_information.seat_info[desired_reservation]["free"] >= num_travellers for
                               train in connection.trains]
         if all(reservation_states):
-            color = QtGui.QColor("#66bb6a")
+            color = QtGui.QColor("#dffae0")
             overall_reservation_icon = CustomSortTreeWidgetItem.reservation_ok_icon
             tooltip_reservation_main = "Reservierungswunsch erfüllbar"
+            status_label_reservation = StatusLabel("Wunsch erfüllbar")
+            status_label_reservation.background_color = QtGui.QColor("#47a64b")
+            status_label_reservation.border_color = QtGui.QColor("#55aa6a")
         elif any(reservation_states):
-            color = QtGui.QColor("#ffab91")
+            color = QtGui.QColor("#f7dfc6")
             overall_reservation_icon = CustomSortTreeWidgetItem.reservation_partial_icon
             tooltip_reservation_main = "Reservierungswunsch teilweise erfüllbar"
+            status_label_reservation = StatusLabel("Wunsch teilweise erfüllbar")
+            status_label_reservation.background_color = QtGui.QColor("#ffab91")
+            status_label_reservation.border_color = QtGui.QColor("#eeaa81")
         else:
-            color = QtGui.QColor("#e57373")
+            color = QtGui.QColor("#edc0bb")
             overall_reservation_icon = CustomSortTreeWidgetItem.reservation_fail_icon
             tooltip_reservation_main = "Reservierungswunsch nicht erfüllbar"
+            status_label_reservation = StatusLabel("Wunsch nicht erfüllbar")
+            status_label_reservation.background_color = QtGui.QColor("#e57373")
+            status_label_reservation.border_color = QtGui.QColor("#d46060")
         overall_trains = ", ".join([train.id for train in connection.trains])
 
         if connection.num_train_changes == 0:
@@ -173,6 +196,7 @@ class ResultWidget(QtWidgets.QTreeWidget):
             train_changes = "0 ({} - {})".format(train.start_station, train.final_station)
             overall_reservation_icon += " " + self._get_reservation_text(train.reservation_information, search_params)
             tooltip_reservation_main = self._get_reservation_tooltip(train.reservation_information)
+            status_label_reservation.setText(self._get_reservation_text(train.reservation_information, search_params))
         else:
             train_changes = str(connection.num_train_changes)
 
@@ -182,9 +206,11 @@ class ResultWidget(QtWidgets.QTreeWidget):
         data_columns = (travel_time_str, connection.travel_duration, train_changes, overall_trains,
                         str(price_info), overall_reservation_icon)
 
-        item = CustomSortTreeWidgetItem(data_columns)
+        item = CustomSortTreeWidgetItem(self, data_columns)
         item.setToolTip(5, tooltip_reservation_main)
         item.setToolTip(4, self._get_price_tooltip(connection.price_information))
+        #status_label_reservation.clicked.connect(lambda : print("asd"))
+        self.setItemWidget(item, 5, status_label_reservation)
 
         if connection.num_train_changes > 0:
             for idx, train in enumerate(connection.trains):
@@ -197,7 +223,7 @@ class ResultWidget(QtWidgets.QTreeWidget):
                 data_columns = (
                     travel_time_str, travel_dur_str, "{} - {}".format(train.start_station, train.final_station),
                     train.id, "", reservation_info)
-                subitem = CustomSortTreeWidgetItem(data_columns)
+                subitem = CustomSortTreeWidgetItem(item, data_columns)
                 subitem.sortable = False
                 subitem.setToolTip(5, self._get_reservation_tooltip(train.reservation_information))
                 item.addChild(subitem)

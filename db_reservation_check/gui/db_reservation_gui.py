@@ -119,6 +119,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self.switch_stations.setFixedSize(QtCore.QSize(30, 30))
         self.switch_stations.setStyleSheet(
             "QPushButton {background-color: #00ffffff; border-width: 0px; margin: 0px;}")
+        self.switch_stations.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         # self.switch_stations.setPixmap(QtGui.QPixmap("arrows.svg"))
         self.switch_stations.clicked.connect(self.on_switch_stations)
 
@@ -295,7 +296,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
         self._check_dependencies()
         self.internet_checker = InternetCheckWorker(self)
         self.internet_checker.status_changed.connect(self.on_internet_status_changed)
-        self.internet_checker.start()
+        #self.internet_checker.start()
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self.internet_checker.terminate()
@@ -465,7 +466,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
         train.reservation_information.info_available = True
         train.reservation_information.total_seats = 213
         train.reservation_information.total_seats_free = 123
-        train.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 120, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
+        train.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 220, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
         train.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
         train.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 10, "total": 25,
                                                                                 "wagon": set(["9"])}
@@ -480,7 +481,7 @@ class DBScraperGui(QtWidgets.QMainWindow):
         train2.reservation_information.info_available = True
         train2.reservation_information.total_seats = 213
         train2.reservation_information.total_seats_free = 123
-        train2.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 120, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
+        train2.reservation_information.seat_info[ReservationOption.STANDARD] = {"free": 120, "total": 220, "wagon": set(["1","2","3","4","5","6","7","8","9"])}
         train2.reservation_information.seat_info[ReservationOption.KLEINKIND] = {"free": 1, "total": 5, "wagon": set(["9"])}
         train2.reservation_information.seat_info[ReservationOption.FAMILIE] = {"free": 0, "total": 25,
                                                                               "wagon": set(["9"])}
@@ -489,6 +490,10 @@ class DBScraperGui(QtWidgets.QMainWindow):
 
         self.current_search_params = self.create_search_params()
         self.result_widget.insert_connection(connection, self.current_search_params)
+
+        connection2 = connection
+        connection2.trains = connection2.trains[1:]
+        self.result_widget.insert_connection(connection2, self.current_search_params)
 
         return
 
@@ -714,6 +719,9 @@ def start_gui():
             padding-left: -5px;
             min-height: 5px;
             height: 15px;
+        }
+        QTreeWidget::item::selected {
+            background-color: none;
         }
         """
 
