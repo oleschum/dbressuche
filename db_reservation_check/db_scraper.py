@@ -550,8 +550,13 @@ class DBReservationScraper:
                 duration = train_html.find_element(By.CSS_SELECTOR,
                                                    "span[class*='verbindungs-transfer__dauer--desktop']").text
 
-                train_id = train_html.find_element(By.CSS_SELECTOR,
-                                                   "span[class='test-zugnummer-label__text']").text
+                try:
+                    train_id = train_html.find_element(By.CSS_SELECTOR,
+                                                       "span[class='test-zugnummer-label__text']").text
+                except:
+                    train_id = train_html.find_element(By.CSS_SELECTOR,
+                                                       "div[class*='test-zugnummer-label'] ri-transport-chip")
+                    train_id = train_id.get_attribute("transport-text")
 
                 end_time = train_html.find_element(By.CSS_SELECTOR,
                                                    "time[class*='verbindungs-halt__zeit-ankunft']").text
