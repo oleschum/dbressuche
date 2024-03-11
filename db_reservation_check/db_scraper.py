@@ -393,8 +393,8 @@ class DBReservationScraper:
             frame = self.browser.find_element(By.CSS_SELECTOR, "iframe[class*=db-web")
             self.browser.switch_to.frame(frame)
             wagon_list = WebDriverWait(self.browser, 10).until(EC.visibility_of_element_located(
-                (By.CSS_SELECTOR, "div[class*=Wagenliste")))
-            all_wagons = wagon_list.find_elements(By.CSS_SELECTOR, "div[class*=Wagenteil")
+                (By.CSS_SELECTOR, "div[class*=MinizugArea")))
+            all_wagons = wagon_list.find_elements(By.CSS_SELECTOR, 'div[class*="MinizugWagen _wagen"')
         except Exception as e:
             # we may have opened an iframe --> make sure to close it
             try:
@@ -410,7 +410,7 @@ class DBReservationScraper:
         reservation_info.info_available = True
         for wagon in all_wagons:
             try:
-                wagon_nr = wagon.get_attribute("data-wagen-nr")
+                wagon_nr = wagon.get_attribute("data-minizug-wagen-nr")
             except:
                 continue
 

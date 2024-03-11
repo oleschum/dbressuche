@@ -24,6 +24,9 @@ def get_latest_version() -> tuple[str, str, str]:
         response = requests.get(repo_query)
     except requests.exceptions.RequestException as e:
         return DEFAULT_VERSION
+
+    if "tag_name" not in response.json():
+        return DEFAULT_VERSION
     tag_name = response.json()["tag_name"]
     version = re.match(regex, tag_name)
     if version:
